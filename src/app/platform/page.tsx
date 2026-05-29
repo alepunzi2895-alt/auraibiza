@@ -18,6 +18,7 @@ import {
   getBookingRequests, updateBookingRequestStatus,
   getPlatformCommissions, upsertPlatformCommission, deletePlatformCommission,
   togglePropertyPublic,
+  addAgentToConcierge, removeAgentFromConcierge, updateAgentCommissionRate,
 } from "../actions";
 
 const calcSplit = (ownerPriceTotal: number, conciergeFee: number, rate: number) => {
@@ -607,6 +608,8 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
   const [tab, setTab] = useState("calendar");
   const [assetTab, setAssetTab] = useState("residenze");
   const [selectedRoom, setSelectedRoom] = useState("");
+  const [newAgentNick, setNewAgentNick] = useState("");
+  const [newAgentCommRate, setNewAgentCommRate] = useState("10");
   const [selectedRange, setSelectedRange] = useState<Range>({ start: null, end: null });
   const [newMethodName, setNewMethodName] = useState("");
 
@@ -630,6 +633,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
   const [notes, setNotes] = useState("");
   const [guestsCount, setGuestsCount] = useState("1");
   const [conciergeFee, setConciergeFee] = useState("0");
+  const [agentFeeVal, setAgentFeeVal] = useState("0");
   const [feeMode, setFeeMode] = useState<'per_night' | 'percentage'>('per_night');
   const [confirmModal, setConfirmModal] = useState<any>(null); // For "Invia al Proprietario"
   const [deleteBookingId, setDeleteBookingId] = useState<string | null>(null);
@@ -725,22 +729,41 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
     if (!pricing) return null;
     const ownerPrice = pricing.baseTotal + pricing.cleaningFee;
     const feeVal = Number(conciergeFee) || 0;
-    const totalFee = feeMode === 'percentage'
+    const concFee = feeMode === 'percentage'
       ? Math.round(ownerPrice * feeVal / 100 * 100) / 100
       : feeVal * pricing.nights;
+    const agFee = user.role === "agent" ? (Number(agentFeeVal) || 0) : 0;
+    // find concierge commission on this agent
+    const agentCollab = (data.agentConciergeCollabs || []).find((c: any) => c.agent_id === user.id);
+    const concCommOnAgent = agentCollab ? Math.round(agFee * (agentCollab.commission_rate || 0) / 100 * 100) / 100 : 0;
     return {
       ownerPrice,
-      conciergeFee: totalFee,
-      totalPrice: ownerPrice + totalFee
+      conciergeFee: concFee,
+      agentFee: agFee,
+      conciergeCommissionOnAgent: concCommOnAgent,
+      agentNet: agFee - concCommOnAgent,
+      totalPrice: ownerPrice + concFee + agFee
     };
-  }, [pricing, conciergeFee, feeMode]);
+  }, [pricing, conciergeFee, feeMode, agentFeeVal, user.role, data.agentConciergeCollabs, user.id]);
 
   const handleCreateBooking = async () => {
     if (!clientName.trim() || !selectedRange?.start || !selectedRange?.end || !totals || !pricing) { setMsg("⚠ Completa tutti i campi"); return; }
+    // For agents: find the concierge they're linked to for this property
+    let conciergeIdForBooking = user.id;
+    if (user.role === "agent") {
+      const agentCollab = (data.agentConciergeCollabs || []).find((c: any) => c.agent_id === user.id);
+      if (agentCollab) conciergeIdForBooking = agentCollab.concierge_id;
+    }
     await createBooking({
-      room_id: selectedRoom, concierge_id: user.id, client_name: clientName, client_surname: clientSurname,
+      room_id: selectedRoom,
+      concierge_id: conciergeIdForBooking,
+      agent_id: user.role === "agent" ? user.id : null,
+      client_name: clientName, client_surname: clientSurname,
       start_date: selectedRange.start, end_date: selectedRange.end, notes,
-      owner_price_total: totals.ownerPrice, concierge_fee: totals.conciergeFee, total_price: totals.totalPrice,
+      owner_price_total: totals.ownerPrice,
+      concierge_fee: totals.conciergeFee,
+      agent_fee: totals.agentFee,
+      total_price: totals.totalPrice,
       stay_price_total: pricing.baseTotal, cleaning_fee_total: pricing.cleaningFee,
       guests_count: parseInt(guestsCount) || 1,
       fee_mode: feeMode, fee_value: Number(conciergeFee) || 0
@@ -949,29 +972,70 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                   </div>
                   <div style={{ marginTop: 12 }}><label style={label}>Note</label><textarea style={{ ...input, minHeight: 60, resize: "vertical" }} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Richieste speciali..." /></div>
                 </div>
+                {/* Fee fields */}
+                <div style={card}>
+                  <h3 style={h3Style}>3. Commissioni</h3>
+                  <div style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "flex-end" }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={label}>{user.role === "agent" ? "Fee Concierge (al concierge)" : "Tua Commissione"}</label>
+                      <input style={input} type="number" min="0" step="0.5" value={conciergeFee} onChange={e => setConciergeFee(e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={label}>Modalità</label>
+                      <select style={sel} value={feeMode} onChange={e => setFeeMode(e.target.value as any)}>
+                        <option value="per_night">€/notte</option>
+                        <option value="percentage">%</option>
+                      </select>
+                    </div>
+                  </div>
+                  {user.role === "agent" && (
+                    <div style={{ marginBottom: 0 }}>
+                      <label style={label}>La Mia Fee Agente (€ totale)</label>
+                      <input style={input} type="number" min="0" step="1" value={agentFeeVal} onChange={e => setAgentFeeVal(e.target.value)} placeholder="es. 50" />
+                      {totals && totals.conciergeCommissionOnAgent > 0 && (
+                        <div style={{ fontSize: 11, color: C.textDim, marginTop: 6 }}>
+                          Il concierge trattiene <span style={{ color: C.gold }}>{(data.agentConciergeCollabs || []).find((c: any) => c.agent_id === user.id)?.commission_rate || 0}%</span> = <span style={{ color: C.danger }}>-€{totals.conciergeCommissionOnAgent.toFixed(2)}</span> → a te: <span style={{ color: C.success }}>€{totals.agentNet.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {pricing && totals && (
                   <div style={{ ...card, borderColor: C.gold + "44", background: C.gold + "08" }}>
-                    <h3 style={h3Style}>Riepilogo</h3>
-                    <div style={{ fontSize: 12, lineHeight: 2 }}>
-                      <div>Stanza: <strong>{currentRoom?.name}</strong></div>
-                      <div>Date: <strong>{formatDate(selectedRange.start!)}</strong> → <strong>{formatDate(selectedRange.end!)}</strong></div>
-                      <div>Notti: <strong>{pricing.nights}</strong></div>
-                      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 8 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                          <span>Soggiorno ({pricing.nights} nt)</span>
-                          <span>€{pricing.baseTotal}</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                          <span>Costi Pulizia</span>
-                          <span>€{pricing.cleaningFee}</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontFamily: FONT, color: C.gold, marginTop: 10, fontWeight: 600 }}>
-                          <span>Totale</span>
-                          <span>€{totals.ownerPrice}</span>
-                        </div>
+                    <h3 style={h3Style}>Split Riepilogo</h3>
+                    <div style={{ fontSize: 12, lineHeight: 2.2 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: C.textMuted }}>Soggiorno ({pricing.nights} notti)</span>
+                        <span>€{pricing.baseTotal}</span>
                       </div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: C.textMuted }}>Pulizie</span>
+                        <span>€{pricing.cleaningFee}</span>
+                      </div>
+                      {totals.conciergeFee > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", color: C.gold }}>
+                          <span>{user.role === "agent" ? "Fee Concierge" : "Tua Commissione"}</span>
+                          <span>+€{totals.conciergeFee.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {user.role === "agent" && totals.agentFee > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", color: C.info }}>
+                          <span>Tua Fee Agente</span>
+                          <span>+€{totals.agentFee.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4, display: "flex", justifyContent: "space-between", fontFamily: FONT, fontSize: 20, color: C.gold, fontWeight: 600 }}>
+                        <span>Totale Cliente</span>
+                        <span>€{totals.totalPrice.toFixed(2)}</span>
+                      </div>
+                      {user.role === "agent" && totals.agentNet !== undefined && (
+                        <div style={{ fontSize: 11, marginTop: 8, padding: "8px 12px", background: C.surfaceAlt, borderRadius: 6 }}>
+                          <div style={{ color: C.textDim }}>Distribuzione: Owner €{totals.ownerPrice} · Concierge €{(totals.conciergeFee + totals.conciergeCommissionOnAgent).toFixed(2)} · Tu €{totals.agentNet.toFixed(2)}</div>
+                        </div>
+                      )}
                     </div>
-                    <button style={{ ...btn("gold"), width: "100%", marginTop: 12 }} onClick={handleCreateBooking}>Crea Prenotazione</button>
+                    <button style={{ ...btn("gold"), width: "100%", marginTop: 14 }} onClick={handleCreateBooking}>Crea Prenotazione</button>
                   </div>
                 )}
               </div>
@@ -1223,6 +1287,65 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
         })()}
         {tab === "settings" && (
           <div>
+            {/* I miei Agenti — solo per concierge */}
+            {user.role === "concierge" && (
+              <div style={{ ...card, marginBottom: 16 }}>
+                <h3 style={h3Style}>👥 I Miei Agenti</h3>
+                <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 20, lineHeight: 1.7 }}>
+                  Aggiungi agenti al tuo team. Loro potranno prenotare sulle tue proprietà aggiungendo la propria fee. Tu prendi una commissione sulla loro fee.
+                </p>
+                <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+                  <input style={{ ...input, flex: 1, minWidth: 160 }} value={newAgentNick} onChange={e => setNewAgentNick(e.target.value)} placeholder="Nickname agente..." />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input style={{ ...input, width: 80 }} type="number" min="0" max="50" step="1" value={newAgentCommRate} onChange={e => setNewAgentCommRate(e.target.value)} />
+                    <span style={{ fontSize: 12, color: C.textMuted, whiteSpace: "nowrap" }}>% su sua fee</span>
+                  </div>
+                  <button style={btn("gold")} onClick={async () => {
+                    if (!newAgentNick.trim()) return;
+                    const res = await addAgentToConcierge(user.id, newAgentNick, parseFloat(newAgentCommRate) || 0);
+                    if (!(res as any).success) { setMsg("⚠ " + (res as any).error); return; }
+                    setNewAgentNick(""); setMsg("Agente aggiunto al team");
+                    refresh();
+                  }}>Aggiungi Agente</button>
+                </div>
+                {/* Lista agenti sotto questo concierge */}
+                {(data.agentConciergeCollabs || []).filter((c: any) => c.concierge_id === user.id).length === 0 ? (
+                  <div style={{ fontSize: 12, color: C.textDim, fontStyle: "italic" }}>Nessun agente nel tuo team. Aggiungi agenti con il form qui sopra.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {(data.agentConciergeCollabs || []).filter((c: any) => c.concierge_id === user.id).map((c: any) => (
+                      <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: C.surfaceAlt, borderRadius: 8, border: `1px solid ${C.border}` }}>
+                        <div>
+                          <span style={{ fontWeight: 700, color: C.gold }}>🌐 {c.agent_nickname}</span>
+                          <span style={{ fontSize: 11, color: C.textDim, marginLeft: 12 }}>Commissione sulla sua fee:</span>
+                          <span style={{ fontSize: 13, color: C.text, marginLeft: 4, fontWeight: 600 }}>{c.commission_rate}%</span>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <input
+                            type="number" min="0" max="50" defaultValue={c.commission_rate}
+                            style={{ ...input, width: 70, padding: "4px 8px" }}
+                            onBlur={async e => {
+                              const rate = parseFloat(e.target.value) || 0;
+                              await updateAgentCommissionRate(c.id, rate);
+                              setMsg("Commissione aggiornata");
+                              refresh();
+                            }}
+                          />
+                          <span style={{ fontSize: 11, color: C.textDim }}>%</span>
+                          <button style={{ ...btn(), color: C.danger, padding: "4px 10px", fontSize: 10, borderColor: C.danger + "44" }} onClick={async () => {
+                            if (!confirm(`Rimuovere ${c.agent_nickname} dal tuo team?`)) return;
+                            await removeAgentFromConcierge(c.id);
+                            setMsg("Agente rimosso");
+                            refresh();
+                          }}>Rimuovi</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Referral link box */}
             <div style={{ ...card, background: C.goldGlow, borderColor: C.borderGold, marginBottom: 16 }}>
               <h3 style={h3Style}>🔗 Il Tuo Link Referral</h3>
@@ -3244,11 +3367,43 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
         {tab === "overview" && (
           <div>
             <h2 style={h2Style}>Overview Piattaforma</h2>
+
+            {/* Admin referral link */}
+            <div style={{ ...card, background: C.goldGlow, borderColor: C.borderGold, marginBottom: 24 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                <div>
+                  <h3 style={{ ...h3Style, marginBottom: 4 }}>🔗 Il Tuo Link Referral Admin</h3>
+                  <p style={{ fontSize: 12, color: C.textMuted }}>Usa questo link per portare clienti direttamente sulla vetrina con il tuo codice referral.</p>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ padding: "10px 16px", background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: "monospace", fontSize: 12, color: C.gold, wordBreak: "break-all" }}>
+                    {typeof window !== "undefined" ? `${window.location.origin.replace("/platform","")}?ref=${user.nickname}` : `https://auraibiza.com?ref=${user.nickname}`}
+                  </div>
+                  <button style={btn("gold")} onClick={() => {
+                    const base = window.location.origin.replace("/platform","");
+                    navigator.clipboard.writeText(`${base}?ref=${user.nickname}`).then(() => setMsg("✓ Link copiato!"));
+                  }}>Copia</button>
+                </div>
+              </div>
+            </div>
+
             <div style={grid(4)}>
-              <div style={card}><div style={label}>Utenti Totali</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.gold }}>{allUsers.length}</div></div>
-              <div style={card}><div style={label}>Proprietà</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.goldLight }}>{(data.properties || []).length}</div></div>
+              <div style={card}><div style={label}>Utenti Totali</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.gold }}>{allUsers.length}</div>
+                <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{allUsers.filter((u:any)=>u.role==='owner').length} owner · {allUsers.filter((u:any)=>u.role==='concierge').length} concierge · {allUsers.filter((u:any)=>u.role==='agent').length} agenti</div>
+              </div>
+              <div style={card}><div style={label}>Proprietà</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.goldLight }}>{(data.properties || []).length}</div>
+                <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{(data.properties||[]).filter((p:any)=>p.is_public!==0).length} in vetrina</div>
+              </div>
               <div style={card}><div style={label}>Prenotazioni</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.text }}>{totalBookings}</div><div style={{ fontSize: 10, color: C.success, marginTop: 4 }}>{confirmedBookings} confermate</div></div>
-              <div style={card}><div style={label}>Fatturato Confermato</div><div style={{ fontFamily: FONT, fontSize: 28, color: C.success }}>€{totalRevenue.toFixed(0)}</div></div>
+              <div style={card}>
+                <div style={label}>Fatturato Confermato</div>
+                <div style={{ fontFamily: FONT, fontSize: 24, color: C.success }}>€{totalRevenue.toFixed(0)}</div>
+                {(() => {
+                  const confirmed = (data.bookings||[]).filter((b:any)=>["confirmed_owner","evaso"].includes(b.status));
+                  const platFees = confirmed.reduce((s:number,b:any)=>s+(b.platform_fee||0),0);
+                  return platFees > 0 ? <div style={{ fontSize: 10, color: C.gold, marginTop: 4 }}>di cui €{platFees.toFixed(0)} commissioni piattaforma</div> : null;
+                })()}
+              </div>
             </div>
             <div style={card}>
               <h3 style={h3Style}>Distribuzione Asset</h3>

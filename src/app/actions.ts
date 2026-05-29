@@ -42,6 +42,7 @@ export async function initDatabase() {
       `CREATE TABLE IF NOT EXISTS commission_rules (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, rate REAL NOT NULL, mode TEXT NOT NULL DEFAULT 'percentage', created_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS booking_requests (id TEXT PRIMARY KEY, property_id TEXT, room_id TEXT, client_name TEXT NOT NULL, client_email TEXT, client_phone TEXT, check_in TEXT, check_out TEXT, guests INTEGER DEFAULT 1, message TEXT, status TEXT DEFAULT 'new', created_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS platform_commissions (id TEXT PRIMARY KEY, owner_id TEXT, asset_type TEXT, rate REAL NOT NULL, created_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS agent_concierge_collabs (id TEXT PRIMARY KEY, concierge_id TEXT NOT NULL, agent_id TEXT NOT NULL, commission_rate REAL DEFAULT 0, created_at INTEGER NOT NULL)`,
     ], "write");
 
     // Migrations for existing tables
@@ -73,6 +74,10 @@ export async function initDatabase() {
       "ALTER TABLE bookings ADD COLUMN platform_fee REAL DEFAULT 0",
       "ALTER TABLE bookings ADD COLUMN platform_fee_rate REAL DEFAULT 0",
       "ALTER TABLE bookings ADD COLUMN referral_user_id TEXT",
+      "ALTER TABLE bookings ADD COLUMN agent_fee REAL DEFAULT 0",
+      "ALTER TABLE bookings ADD COLUMN agent_id TEXT",
+      "ALTER TABLE bookings ADD COLUMN concierge_commission_on_agent REAL DEFAULT 0",
+      "ALTER TABLE collaborations ADD COLUMN collaborator_role TEXT DEFAULT 'concierge'",
     ];
     for (const sql of migrations) {
       try { await db.execute(sql); } catch (_e) {}
@@ -167,7 +172,7 @@ export async function getDashboardData(userId?: string, role?: string) {
           }
         }
       }
-    } else if ((role === "concierge" || role === "agent") && userId) {
+    } else if (role === "concierge" && userId) {
       const userRes = await db.execute({ sql: "SELECT nickname FROM users WHERE id = ?", args: [userId] });
       const nick = (userRes.rows[0] as any)?.nickname;
       const collabs = await db.execute({ sql: "SELECT property_id FROM collaborations WHERE concierge_nickname = ?", args: [nick] });
@@ -181,10 +186,39 @@ export async function getDashboardData(userId?: string, role?: string) {
           bookings = await db.execute(`SELECT * FROM bookings WHERE room_id IN (${rIds.map(() => '?').join(',')}) ORDER BY created_at DESC`, rIds);
         }
       }
+    } else if (role === "agent" && userId) {
+      // Path 1: direct collaboration (owner added agent directly)
+      const userRes = await db.execute({ sql: "SELECT nickname FROM users WHERE id = ?", args: [userId] });
+      const nick = (userRes.rows[0] as any)?.nickname;
+      const directCollabs = await db.execute({ sql: "SELECT property_id FROM collaborations WHERE concierge_nickname = ?", args: [nick] });
+      let allPIds: string[] = directCollabs.rows.map((c: any) => c.property_id as string);
+
+      // Path 2: through concierge (concierge added agent to their team)
+      const conciergeLinks = await db.execute({ sql: "SELECT concierge_id FROM agent_concierge_collabs WHERE agent_id = ?", args: [userId] });
+      for (const link of conciergeLinks.rows) {
+        const cId = (link as any).concierge_id;
+        const cNickRes = await db.execute({ sql: "SELECT nickname FROM users WHERE id = ?", args: [cId] });
+        const cNick = (cNickRes.rows[0] as any)?.nickname;
+        if (cNick) {
+          const cCollabs = await db.execute({ sql: "SELECT property_id FROM collaborations WHERE concierge_nickname = ?", args: [cNick] });
+          cCollabs.rows.forEach((c: any) => { if (!allPIds.includes(c.property_id)) allPIds.push(c.property_id); });
+        }
+      }
+
+      if (allPIds.length > 0) {
+        properties = await db.execute(`SELECT * FROM properties WHERE id IN (${allPIds.map(() => '?').join(',')})`, allPIds);
+        rooms = await db.execute(`SELECT * FROM rooms WHERE property_id IN (${allPIds.map(() => '?').join(',')})`, allPIds);
+        const rIds = rooms.rows.map((r: any) => r.id);
+        if (rIds.length > 0) {
+          pricing = await db.execute(`SELECT * FROM pricing WHERE room_id IN (${rIds.map(() => '?').join(',')})`, rIds);
+          bookings = await db.execute(`SELECT * FROM bookings WHERE (room_id IN (${rIds.map(() => '?').join(',')}) AND agent_id = ?) OR (room_id IN (${rIds.map(() => '?').join(',')}) AND concierge_id = ?) ORDER BY created_at DESC`, [...rIds, userId, ...rIds, userId]);
+        }
+      }
     }
 
     const pendingUsers = (await db.execute("SELECT * FROM users WHERE status = 'pending' ORDER BY created_at DESC")).rows;
     const commissionRules = (await db.execute("SELECT * FROM commission_rules")).rows;
+    const agentConciergeCollabs = (await db.execute("SELECT acc.*, u_a.nickname as agent_nickname, u_c.nickname as concierge_nickname FROM agent_concierge_collabs acc LEFT JOIN users u_a ON acc.agent_id = u_a.id LEFT JOIN users u_c ON acc.concierge_id = u_c.id")).rows;
 
     return {
       users: users.rows,
@@ -201,6 +235,7 @@ export async function getDashboardData(userId?: string, role?: string) {
       collaboratedBookings,
       pendingUsers,
       commissionRules,
+      agentConciergeCollabs,
     };
   } catch (error: any) {
     console.error("Dashboard Data Error:", error);
@@ -282,28 +317,59 @@ export async function setCommissionRule(userId: string, rate: number, mode: stri
 export async function createBooking(data: any) {
   try {
     const id = `b${uid()}`;
-    // Auto-lookup platform commission rate
+
+    // 1. Auto-lookup platform commission rate (from owner+asset_type)
     let platformFeeRate = 0;
     let platformFee = 0;
+    let ownerId = "";
     try {
       const roomRes = await db.execute({ sql: "SELECT property_id FROM rooms WHERE id = ?", args: [data.room_id] });
       if (roomRes.rows.length > 0) {
         const propId = (roomRes.rows[0] as any).property_id;
         const propRes = await db.execute({ sql: "SELECT owner_id, asset_type FROM properties WHERE id = ?", args: [propId] });
         if (propRes.rows.length > 0) {
-          const { owner_id, asset_type } = propRes.rows[0] as any;
-          platformFeeRate = await getEffectiveCommissionRate(owner_id, asset_type);
+          const prop = propRes.rows[0] as any;
+          ownerId = prop.owner_id;
+          platformFeeRate = await getEffectiveCommissionRate(prop.owner_id, prop.asset_type);
           platformFee = Math.round((data.owner_price_total || 0) * platformFeeRate / 100 * 100) / 100;
         }
       }
     } catch (_e) {}
+
+    // 2. Agent fee + concierge commission on agent
+    const agentFee = data.agent_fee || 0;
+    const agentId = data.agent_id || null;
+    let conciergeCommissionOnAgent = 0;
+    if (agentId && data.concierge_id) {
+      try {
+        const collabRes = await db.execute({ sql: "SELECT commission_rate FROM agent_concierge_collabs WHERE concierge_id = ? AND agent_id = ?", args: [data.concierge_id, agentId] });
+        if (collabRes.rows.length > 0) {
+          const rate = (collabRes.rows[0] as any).commission_rate || 0;
+          conciergeCommissionOnAgent = Math.round(agentFee * rate / 100 * 100) / 100;
+        }
+      } catch (_e) {}
+    }
+
+    // 3. total = owner_price + concierge_fee + agent_fee (platform fee hidden from client)
+    const totalPrice = (data.owner_price_total || 0) + (data.concierge_fee || 0) + agentFee;
+
     await db.execute({
-      sql: "INSERT INTO bookings (id, room_id, concierge_id, client_name, client_surname, start_date, end_date, notes, owner_price_total, concierge_fee, total_price, status, stay_price_total, cleaning_fee_total, guests_count, fee_mode, fee_value, asset_type, platform_fee, platform_fee_rate, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      args: [id, data.room_id, data.concierge_id, data.client_name, data.client_surname || "", data.start_date, data.end_date, data.notes || "", data.owner_price_total, data.concierge_fee, data.total_price, "draft", data.stay_price_total || 0, data.cleaning_fee_total || 0, data.guests_count || 1, data.fee_mode || 'per_night', data.fee_value || 0, data.asset_type || 'apartment', platformFee, platformFeeRate, Date.now()],
+      sql: "INSERT INTO bookings (id, room_id, concierge_id, client_name, client_surname, start_date, end_date, notes, owner_price_total, concierge_fee, total_price, status, stay_price_total, cleaning_fee_total, guests_count, fee_mode, fee_value, asset_type, platform_fee, platform_fee_rate, agent_fee, agent_id, concierge_commission_on_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      args: [id, data.room_id, data.concierge_id, data.client_name, data.client_surname || "", data.start_date, data.end_date, data.notes || "", data.owner_price_total, data.concierge_fee, totalPrice, "draft", data.stay_price_total || 0, data.cleaning_fee_total || 0, data.guests_count || 1, data.fee_mode || 'per_night', data.fee_value || 0, data.asset_type || 'apartment', platformFee, platformFeeRate, agentFee, agentId, conciergeCommissionOnAgent, Date.now()],
     });
     revalidatePath("/");
     return { id };
   } catch (error) { return { id: "", error: String(error) }; }
+}
+
+// Calculate full cascade split (pure function, no DB)
+export async function calcCascadeSplit(ownerPriceTotal: number, platformFeeRate: number, conciergeFee: number, agentFee: number, conciergeCommissionOnAgent: number) {
+  const platformFee = Math.round(ownerPriceTotal * platformFeeRate / 100 * 100) / 100;
+  const ownerNet = Math.round((ownerPriceTotal - platformFee) * 100) / 100;
+  const conciergeNet = Math.round((conciergeFee + conciergeCommissionOnAgent) * 100) / 100;
+  const agentNet = Math.round((agentFee - conciergeCommissionOnAgent) * 100) / 100;
+  const totalClient = ownerPriceTotal + conciergeFee + agentFee;
+  return { platformFee, ownerNet, conciergeNet, agentNet, totalClient };
 }
 
 export async function updateBookingStatus(id: string, status: string) {
@@ -484,14 +550,49 @@ export async function removeRoomImage(roomId: string, index: number) {
 export async function addCollaboration(propertyId: string, nickname: string) {
   try {
     const nick = nickname.toLowerCase().trim();
-    const userRes = await db.execute({ sql: "SELECT id, status FROM users WHERE nickname = ?", args: [nick] });
+    const userRes = await db.execute({ sql: "SELECT id, status, role FROM users WHERE nickname = ?", args: [nick] });
     if (userRes.rows.length === 0) return { success: false, error: `Utente "${nick}" non trovato.` };
     const u = userRes.rows[0] as any;
     if (u.status === 'pending') return { success: false, error: `L'utente "${nick}" non è ancora stato approvato dall'admin.` };
+    if (!['concierge', 'agent', 'owner'].includes(u.role)) return { success: false, error: `L'utente "${nick}" non può collaborare (ruolo: ${u.role}).` };
     const existing = await db.execute({ sql: "SELECT id FROM collaborations WHERE property_id = ? AND concierge_nickname = ?", args: [propertyId, nick] });
     if (existing.rows.length > 0) return { success: false, error: "Collaboratore già presente." };
-    await db.execute({ sql: "INSERT INTO collaborations (id, property_id, concierge_nickname) VALUES (?, ?, ?)", args: [uid(), propertyId, nick] });
+    await db.execute({ sql: "INSERT INTO collaborations (id, property_id, concierge_nickname, collaborator_role) VALUES (?, ?, ?, ?)", args: [uid(), propertyId, nick, u.role] });
     revalidatePath("/");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+// --- AGENT-CONCIERGE COLLABORATIONS ---
+
+export async function addAgentToConcierge(conciergeId: string, agentNickname: string, commissionRate: number) {
+  try {
+    const nick = agentNickname.toLowerCase().trim();
+    const agentRes = await db.execute({ sql: "SELECT id, status, role FROM users WHERE nickname = ?", args: [nick] });
+    if (agentRes.rows.length === 0) return { success: false, error: `Agente "${nick}" non trovato.` };
+    const agent = agentRes.rows[0] as any;
+    if (agent.status === 'pending') return { success: false, error: `L'agente "${nick}" non è ancora stato approvato.` };
+    if (agent.role !== 'agent') return { success: false, error: `"${nick}" non ha il ruolo agente (ruolo attuale: ${agent.role}).` };
+    const existing = await db.execute({ sql: "SELECT id FROM agent_concierge_collabs WHERE concierge_id = ? AND agent_id = ?", args: [conciergeId, agent.id] });
+    if (existing.rows.length > 0) return { success: false, error: "Agente già presente nel tuo team." };
+    await db.execute({ sql: "INSERT INTO agent_concierge_collabs (id, concierge_id, agent_id, commission_rate, created_at) VALUES (?, ?, ?, ?, ?)", args: [uid(), conciergeId, agent.id, commissionRate, Date.now()] });
+    revalidatePath("/platform");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function removeAgentFromConcierge(id: string) {
+  try {
+    await db.execute({ sql: "DELETE FROM agent_concierge_collabs WHERE id = ?", args: [id] });
+    revalidatePath("/platform");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function updateAgentCommissionRate(id: string, rate: number) {
+  try {
+    await db.execute({ sql: "UPDATE agent_concierge_collabs SET commission_rate = ? WHERE id = ?", args: [rate, id] });
+    revalidatePath("/platform");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
 }
