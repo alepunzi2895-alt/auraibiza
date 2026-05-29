@@ -59,6 +59,11 @@ export async function initDatabase() {
       "ALTER TABLE users ADD COLUMN password TEXT",
       "ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'",
       "ALTER TABLE users ADD COLUMN managed_by TEXT",
+      "ALTER TABLE users ADD COLUMN first_name TEXT",
+      "ALTER TABLE users ADD COLUMN last_name TEXT",
+      "ALTER TABLE users ADD COLUMN email TEXT",
+      "ALTER TABLE users ADD COLUMN phone TEXT",
+      "ALTER TABLE users ADD COLUMN services TEXT",
     ];
     for (const sql of migrations) {
       try { await db.execute(sql); } catch (_e) {}
@@ -608,7 +613,12 @@ export async function deletePropertyAction(propertyId: string) {
   } catch (error) { return { success: false, error: String(error) }; }
 }
 
-export async function registerUser(nickname: string, password: string, role: "owner" | "concierge" | "agent" = "concierge") {
+export async function registerUser(
+  nickname: string,
+  password: string,
+  role: "owner" | "concierge" | "agent" = "concierge",
+  profile?: { firstName?: string; lastName?: string; email?: string; phone?: string; services?: string[] }
+) {
   try {
     const nick = nickname.toLowerCase().trim();
     if (nick.length < 3) return { success: false, error: "Il nickname deve essere di almeno 3 caratteri." };
@@ -617,8 +627,14 @@ export async function registerUser(nickname: string, password: string, role: "ow
     if (existing.rows.length > 0) return { success: false, error: "Nickname già in uso." };
     const id = `u${uid()}`;
     await db.execute({
-      sql: "INSERT INTO users (id, nickname, role, password, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-      args: [id, nick, role, hashPassword(password), 'pending', Date.now()],
+      sql: "INSERT INTO users (id, nickname, role, password, status, first_name, last_name, email, phone, services, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      args: [
+        id, nick, role, hashPassword(password), 'pending',
+        profile?.firstName || null, profile?.lastName || null,
+        profile?.email || null, profile?.phone || null,
+        profile?.services?.length ? JSON.stringify(profile.services) : null,
+        Date.now()
+      ],
     });
     revalidatePath("/");
     return { success: true, id };

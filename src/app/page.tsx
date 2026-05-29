@@ -35,6 +35,35 @@ const ASSET_TYPES = [
   { v: "scooter", l: "🛵 Scooter" },
 ];
 const assetLabel = (type?: string) => ASSET_TYPES.find(a => a.v === type)?.l || "🏠 Appartamento";
+
+const ASSET_CATEGORIES = [
+  { key: "residenze", label: "Residenze", icon: "🏠", types: ["apartment", "villa"], defaultType: "apartment" },
+  { key: "marine", label: "Marine", icon: "⛵", types: ["boat"], defaultType: "boat" },
+  { key: "mobilita", label: "Mobilità", icon: "🚗", types: ["car", "scooter"], defaultType: "car" },
+];
+
+const CONCIERGE_SERVICES = [
+  { id: "transfer", label: "Transfer aeroporto" },
+  { id: "charter", label: "Charter barca / Yacht" },
+  { id: "restaurants", label: "Prenotazioni ristoranti" },
+  { id: "tours", label: "Tour ed escursioni" },
+  { id: "shopping", label: "Spesa e forniture" },
+  { id: "wellness", label: "Massaggi e wellness" },
+  { id: "nightlife", label: "Serate e nightlife" },
+  { id: "diving", label: "Attività acquatiche" },
+  { id: "rental", label: "Noleggio mezzi" },
+  { id: "events", label: "Organizzazione eventi" },
+];
+
+const OWNER_SERVICES = [
+  { id: "apartments", label: "Appartamenti" },
+  { id: "villas", label: "Ville" },
+  { id: "boats", label: "Barche / Yacht" },
+  { id: "cars", label: "Auto di lusso" },
+  { id: "scooters", label: "Scooter / Moto" },
+  { id: "pool", label: "Piscina privata" },
+  { id: "beach", label: "Spiaggia privata" },
+];
 interface Property { id: string; owner_id: string; name: string; location: string; description?: string; image?: string; }
 interface Room { id: string; property_id: string; name: string; capacity: number; image?: string; description?: string; }
 interface Pricing { id: string; room_id: string; month: string; base_price: number; cleaning_fee: number; }
@@ -83,49 +112,63 @@ const parseImages = (raw?: string): string[] => {
 
 // --- DESIGN TOKENS ---
 const C = {
-  bg: "#0B0E11", surface: "#141820", surfaceAlt: "#1A1F2B",
-  border: "#252B38", borderLight: "#333A4A",
-  gold: "#C8A96E", goldLight: "#E8D5A8", goldDark: "#A0844A",
-  text: "#E8E4DC", textMuted: "#8A8678", textDim: "#5A5850",
-  success: "#4A9E6E", warning: "#D4A843", danger: "#C45B5B", info: "#5B8EC4",
-  available: "#2A4A35", blocked: "#4A2A2A",
+  bg: "#080B0F", surface: "#10141C", surfaceAlt: "#161C28", surfaceGlass: "rgba(16,20,28,0.85)",
+  border: "#1E2433", borderLight: "#2A3348", borderGold: "rgba(200,169,110,0.25)",
+  gold: "#C8A96E", goldLight: "#E8D5A8", goldDark: "#8A6A30", goldGlow: "rgba(200,169,110,0.12)",
+  text: "#EDE9E1", textMuted: "#8A8678", textDim: "#484540",
+  success: "#3D9E6A", warning: "#C89A30", danger: "#B84444", info: "#4A7EC4",
+  available: "#1E3D2A", blocked: "#3D1E1E",
 };
 
 const FONT = `'Cormorant Garamond', Georgia, serif`;
 const FONT_B = `'DM Sans', 'Helvetica Neue', sans-serif`;
 
 const btn = (v = "default"): CSSProperties => ({
-  padding: "8px 18px", border: v === "gold" ? "none" : `1px solid ${C.border}`, borderRadius: 4,
-  background: v === "gold" ? `linear-gradient(135deg, ${C.goldDark}, ${C.gold})` : "transparent",
-  color: v === "gold" ? C.bg : C.text, cursor: "pointer", fontFamily: FONT_B,
-  fontSize: 12, fontWeight: 500, letterSpacing: "0.5px", textTransform: "uppercase", transition: "all 0.2s",
+  padding: "8px 20px", border: v === "gold" ? "none" : `1px solid ${C.border}`, borderRadius: 6,
+  background: v === "gold" ? `linear-gradient(135deg, ${C.goldDark}, ${C.gold})` : "rgba(255,255,255,0.04)",
+  color: v === "gold" ? "#0B0E11" : C.text, cursor: "pointer", fontFamily: FONT_B,
+  fontSize: 11, fontWeight: 600, letterSpacing: "0.8px", textTransform: "uppercase", transition: "all 0.2s",
+  boxShadow: v === "gold" ? "0 2px 12px rgba(200,169,110,0.3)" : "none",
 });
-const card: CSSProperties = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 20, marginBottom: 16 };
-const input: CSSProperties = {
-  width: "100%", padding: "10px 14px", background: C.surfaceAlt, border: `1px solid ${C.border}`,
-  borderRadius: 4, color: C.text, fontFamily: FONT_B, fontSize: 13, outline: "none", boxSizing: "border-box",
+const card: CSSProperties = {
+  background: `linear-gradient(160deg, ${C.surface} 0%, rgba(14,18,26,0.9) 100%)`,
+  border: `1px solid ${C.border}`, borderRadius: 12, padding: 24, marginBottom: 16,
+  boxShadow: "0 4px 24px rgba(0,0,0,0.25)",
 };
-const label: CSSProperties = { fontSize: 11, fontWeight: 500, textTransform: "uppercase", letterSpacing: "1px", color: C.textMuted, marginBottom: 6, display: "block" };
-const h2Style: CSSProperties = { fontFamily: FONT, fontSize: 26, fontWeight: 300, color: C.goldLight, marginBottom: 20, letterSpacing: "1px" };
-const h3Style: CSSProperties = { fontFamily: FONT, fontSize: 18, fontWeight: 400, color: C.gold, marginBottom: 12 };
+const cardGlass: CSSProperties = {
+  background: "rgba(16,20,28,0.75)", backdropFilter: "blur(24px) saturate(1.2)",
+  border: `1px solid rgba(200,169,110,0.15)`, borderRadius: 16, padding: 28, marginBottom: 16,
+  boxShadow: "0 8px 40px rgba(0,0,0,0.4)",
+};
+const input: CSSProperties = {
+  width: "100%", padding: "11px 16px", background: C.surfaceAlt, border: `1px solid ${C.border}`,
+  borderRadius: 8, color: C.text, fontFamily: FONT_B, fontSize: 13, outline: "none", boxSizing: "border-box",
+  transition: "border-color 0.2s",
+};
+const label: CSSProperties = { fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1.2px", color: C.textMuted, marginBottom: 8, display: "block" };
+const h2Style: CSSProperties = { fontFamily: FONT, fontSize: 28, fontWeight: 300, color: C.goldLight, marginBottom: 20, letterSpacing: "1.5px" };
+const h3Style: CSSProperties = { fontFamily: FONT, fontSize: 20, fontWeight: 400, color: C.gold, marginBottom: 14 };
 const badge = (color: string): CSSProperties => ({
-  display: "inline-block", padding: "3px 10px", borderRadius: 3, fontSize: 10, fontWeight: 600,
-  textTransform: "uppercase", letterSpacing: "0.5px", background: color + "22", color, border: `1px solid ${color}44`,
+  display: "inline-flex", alignItems: "center", padding: "4px 12px", borderRadius: 20, fontSize: 10, fontWeight: 600,
+  textTransform: "uppercase", letterSpacing: "0.8px", background: color + "18", color, border: `1px solid ${color}35`,
 });
-const grid = (cols = 2): CSSProperties => ({ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 250px), 1fr))", gap: 12 });
-const nav: CSSProperties = { 
-  display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: 8, padding: "8px 16px", 
-  borderBottom: `1px solid ${C.border}`, background: "rgba(20,24,32,0.8)",
-  msOverflowStyle: "none", scrollbarWidth: "none", WebkitOverflowScrolling: "touch"
+const grid = (cols = 2): CSSProperties => ({ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 250px), 1fr))", gap: 16 });
+const nav: CSSProperties = {
+  display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: 4, padding: "10px 20px",
+  borderBottom: `1px solid ${C.border}`, background: "rgba(8,11,15,0.97)",
+  backdropFilter: "blur(20px)", msOverflowStyle: "none", scrollbarWidth: "none", WebkitOverflowScrolling: "touch",
 };
 const navItem = (active: boolean): CSSProperties => ({
-  flexShrink: 0, padding: "8px 16px", borderRadius: 4, fontSize: 11, fontWeight: 500, letterSpacing: "0.5px",
+  flexShrink: 0, padding: "9px 18px", borderRadius: 8, fontSize: 11, fontWeight: 600, letterSpacing: "0.8px",
   textTransform: "uppercase", cursor: "pointer",
-  background: active ? C.gold + "18" : "transparent", color: active ? C.gold : C.textMuted,
-  border: active ? `1px solid ${C.gold}33` : "1px solid transparent", transition: "all 0.2s",
+  background: active ? C.goldGlow : "transparent",
+  color: active ? C.gold : C.textMuted,
+  border: active ? `1px solid ${C.borderGold}` : "1px solid transparent",
+  transition: "all 0.2s",
+  boxShadow: active ? `0 0 20px ${C.goldGlow}` : "none",
 });
-const th: CSSProperties = { textAlign: "left", padding: "10px 12px", borderBottom: `1px solid ${C.border}`, color: C.textMuted, fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px" };
-const td: CSSProperties = { padding: "10px 12px", borderBottom: `1px solid ${C.border}08` };
+const th: CSSProperties = { textAlign: "left", padding: "11px 14px", borderBottom: `1px solid ${C.border}`, color: C.textMuted, fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1.2px" };
+const td: CSSProperties = { padding: "11px 14px", borderBottom: `1px solid rgba(30,36,51,0.5)` };
 const sel: CSSProperties = { ...input, appearance: "none" as const };
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -524,9 +567,36 @@ function PdfPreview({ data, onClose }: { data: { booking: Booking; room: Room | 
 );
 }
 
+// --- ASSET CATEGORY TABS component ---
+function AssetCategoryTabs({ value, onChange, counts }: { value: string; onChange: (k: string) => void; counts?: Record<string, number> }) {
+  return (
+    <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
+      {ASSET_CATEGORIES.map(cat => {
+        const active = value === cat.key;
+        const count = counts?.[cat.key] ?? 0;
+        return (
+          <button key={cat.key} onClick={() => onChange(cat.key)} style={{
+            display: "flex", alignItems: "center", gap: 8, padding: "10px 18px",
+            borderRadius: 10, border: active ? `1px solid ${C.borderGold}` : `1px solid ${C.border}`,
+            background: active ? C.goldGlow : "rgba(255,255,255,0.03)",
+            color: active ? C.gold : C.textMuted, cursor: "pointer",
+            fontFamily: FONT_B, fontSize: 12, fontWeight: 600, letterSpacing: "0.5px",
+            transition: "all 0.2s", boxShadow: active ? `0 0 16px ${C.goldGlow}` : "none",
+          }}>
+            <span style={{ fontSize: 16 }}>{cat.icon}</span>
+            <span style={{ textTransform: "uppercase", letterSpacing: "0.8px" }}>{cat.label}</span>
+            {count > 0 && <span style={{ background: active ? C.gold : C.textDim, color: active ? C.bg : C.textMuted, borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 700, minWidth: 18, textAlign: "center" }}>{count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // --- CONCIERGE DASHBOARD ---
 function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = false }: { user: User, data: any, refresh: () => void, setPdfPreview: (v: any) => void, isMobile?: boolean }) {
   const [tab, setTab] = useState("calendar");
+  const [assetTab, setAssetTab] = useState("residenze");
   const [selectedRoom, setSelectedRoom] = useState("");
   const [selectedRange, setSelectedRange] = useState<Range>({ start: null, end: null });
   const [newMethodName, setNewMethodName] = useState("");
@@ -536,6 +606,16 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
       setSelectedRoom(data.rooms[0].id);
     }
   }, [data.rooms, selectedRoom]);
+
+  useEffect(() => {
+    const cat = ASSET_CATEGORIES.find(c => c.key === assetTab);
+    if (!cat) return;
+    const first = data.rooms.find((r: any) => {
+      const prop = [...(data.properties || []), ...(data.collaboratedProperties || [])].find((p: any) => p.id === r.property_id);
+      return cat.types.includes(prop?.asset_type || "apartment");
+    });
+    if (first) setSelectedRoom(first.id);
+  }, [assetTab]);
   const [clientName, setClientName] = useState("");
   const [clientSurname, setClientSurname] = useState("");
   const [notes, setNotes] = useState("");
@@ -571,6 +651,19 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
   const [balanceData, setBalanceData] = useState({ amount: "", date: new Date().toLocaleDateString('en-CA'), method: "Contanti" });
 
   const rooms = data.rooms;
+  const allProperties = [...(data.properties || []), ...(data.collaboratedProperties || [])];
+  const currentAssetCat = ASSET_CATEGORIES.find(c => c.key === assetTab) || ASSET_CATEGORIES[0];
+  const filteredRooms = rooms.filter((r: any) => {
+    const prop = allProperties.find((p: any) => p.id === r.property_id);
+    return currentAssetCat.types.includes(prop?.asset_type || "apartment");
+  });
+  const assetCategoryCounts = Object.fromEntries(ASSET_CATEGORIES.map(cat => [
+    cat.key,
+    rooms.filter((r: any) => {
+      const prop = allProperties.find((p: any) => p.id === r.property_id);
+      return cat.types.includes(prop?.asset_type || "apartment");
+    }).length
+  ]));
   const currentRoom = rooms.find((r: any) => r.id === selectedRoom);
 
   const displayBookings = useMemo(() => {
@@ -770,16 +863,25 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
         {tab === "calendar" && (
           <div>
             <h2 style={h2Style}>Disponibilità</h2>
+            <AssetCategoryTabs value={assetTab} onChange={k => { setAssetTab(k); setSelectedRange({ start: null, end: null }); }} counts={assetCategoryCounts} />
+            {filteredRooms.length === 0 ? (
+              <div style={{ ...card, textAlign: "center", color: C.textDim, padding: 40 }}>
+                Nessuna struttura in questa categoria. Chiedi al proprietario di aggiungerti come collaboratore.
+              </div>
+            ) : (
             <div style={{ marginBottom: 16 }}>
               <label style={label}>Seleziona Struttura / Stanza</label>
               <select style={sel} value={selectedRoom} onChange={e => { setSelectedRoom(e.target.value); setSelectedRange({ start: null, end: null }); }}>
-                {rooms.map((r: any) => {
-                  const prop = data.properties.find((p: any) => p.id === r.property_id);
+                {filteredRooms.map((r: any) => {
+                  const prop = allProperties.find((p: any) => p.id === r.property_id);
                   return <option key={r.id} value={r.id}>{prop?.name} — {r.name} (max {r.capacity} pax)</option>;
                 })}
               </select>
             </div>
+            )}
+            {selectedRoom && filteredRooms.some((r: any) => r.id === selectedRoom) && (
             <div style={card}><CalendarView roomId={selectedRoom} onSelectRange={setSelectedRange} selectedRange={selectedRange} roomBookings={data.bookings.filter((b: any) => b.room_id === selectedRoom)} users={data.users} allPricing={data.pricing} /></div>
+            )}
             {selectedRange?.start && (
               <div style={{ ...card, borderColor: C.gold + "44" }}>
                 <div style={{ fontSize: 12, color: C.textMuted }}>
@@ -1204,6 +1306,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
 // --- OWNER DASHBOARD ---
 function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }: { user: User, data: any, refresh: () => void, setPdfPreview: (v: any) => void, isMobile?: boolean }) {
   const [tab, setTab] = useState("properties");
+  const [assetTab, setAssetTab] = useState("residenze");
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomCap, setNewRoomCap] = useState("2");
   const [newRoomDesc, setNewRoomDesc] = useState("");
@@ -1264,6 +1367,11 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
 
   const properties = data.properties.filter((p: any) => p.owner_id === user.id);
   const allRooms = data.rooms.filter((r: any) => properties.some((p: any) => p.id === r.property_id));
+  const ownerAssetCat = ASSET_CATEGORIES.find(c => c.key === assetTab) || ASSET_CATEGORIES[0];
+  const filteredProperties = properties.filter((p: any) => ownerAssetCat.types.includes(p.asset_type || "apartment"));
+  const ownerAssetCounts = Object.fromEntries(ASSET_CATEGORIES.map(cat => [
+    cat.key, properties.filter((p: any) => cat.types.includes(p.asset_type || "apartment")).length
+  ]));
   const collaboratedProperties = data.collaboratedProperties || [];
   const collaboratedRooms = data.collaboratedRooms || [];
   const collaboratedPricing = data.collaboratedPricing || [];
@@ -1565,11 +1673,17 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
 
         {tab === "properties" && (
           <div>
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
               <h2 style={{ ...h2Style, marginBottom: 0 }}>Le Tue Proprietà</h2>
+              <button style={{ ...btn("gold"), padding: "10px 20px" }} onClick={() => document.getElementById("new-prop-form")?.scrollIntoView({ behavior: "smooth" })}>+ Nuova proprietà</button>
             </div>
-            
-            {properties.map((prop: any) => {
+            <AssetCategoryTabs value={assetTab} onChange={setAssetTab} counts={ownerAssetCounts} />
+            {filteredProperties.length === 0 && (
+              <div style={{ ...card, textAlign: "center", color: C.textDim, padding: 40, borderStyle: "dashed" }}>
+                Nessuna proprietà in questa categoria. Aggiungi la prima qui sotto.
+              </div>
+            )}
+            {filteredProperties.map((prop: any) => {
               const propRooms = data.rooms.filter((r: any) => r.property_id === prop.id);
               return (
                 <div key={prop.id} style={{ ...card, marginBottom: 30, borderLeft: `4px solid ${C.gold}` }}>
@@ -1689,16 +1803,16 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
               );
             })}
 
-            <div id="new-prop-form" style={{ ...card, borderStyle: "dashed", background: "rgba(255,255,255,0.02)" }}>
-              <h3 style={h3Style}>+ Nuova Proprietà</h3>
+            <div id="new-prop-form" style={{ ...card, borderStyle: "dashed", background: "rgba(255,255,255,0.02)", borderColor: C.borderGold }}>
+              <h3 style={h3Style}>+ Aggiungi {ownerAssetCat.label} — {ownerAssetCat.icon}</h3>
               <div style={grid(2)}>
-                <div><label style={label}>Nome struttura</label><input style={input} value={newPropName} onChange={e => setNewPropName(e.target.value)} placeholder="es. Villa Aura" /></div>
-                <div><label style={label}>Località / Indirizzo</label><input style={input} value={newPropLoc} onChange={e => setNewPropLoc(e.target.value)} placeholder="Città, Zona" /></div>
+                <div><label style={label}>Nome</label><input style={input} value={newPropName} onChange={e => setNewPropName(e.target.value)} placeholder={assetTab === "marine" ? "es. Aura Of The Sea" : assetTab === "mobilita" ? "es. Range Rover Aura" : "es. Villa Aura"} /></div>
+                <div><label style={label}>Località / Porto / Garage</label><input style={input} value={newPropLoc} onChange={e => setNewPropLoc(e.target.value)} placeholder="Città, Zona, Porto" /></div>
               </div>
               <div style={{ marginTop: 12 }}>
-                <label style={label}>Tipo di Asset</label>
+                <label style={label}>Tipo</label>
                 <select style={sel} value={newPropAssetType} onChange={e => setNewPropAssetType(e.target.value)}>
-                  {ASSET_TYPES.map(a => <option key={a.v} value={a.v}>{a.l}</option>)}
+                  {ASSET_TYPES.filter(a => ownerAssetCat.types.includes(a.v)).map(a => <option key={a.v} value={a.v}>{a.l}</option>)}
                 </select>
               </div>
               <div style={{ marginTop: 12 }}>
@@ -2923,35 +3037,16 @@ export default function Home() {
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dbData, setDbData] = useState<any>(null);
-
-  const [isOwnerMode, setIsOwnerMode] = useState(false);
-  const [logoClicks, setLogoClicks] = useState(0);
   const [pdfPreview, setPdfPreview] = useState<{ booking: Booking; room: Room | undefined; property: Property | undefined } | null>(null);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Shift + Alt + O to toggle Owner registration mode
-      if (e.shiftKey && e.altKey && e.key.toLowerCase() === 'o') {
-        setIsOwnerMode(prev => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const handleLogoTap = () => {
-    const now = Date.now();
-    setLogoClicks(prev => {
-      const newVal = prev + 1;
-      if (newVal >= 3) {
-        setIsOwnerMode(!isOwnerMode);
-        return 0;
-      }
-      return newVal;
-    });
-    // Reset clicks after 1 second of inactivity
-    setTimeout(() => setLogoClicks(0), 1000);
-  };
+  // Registration extended fields
+  const [regRole, setRegRole] = useState<"owner" | "concierge" | "agent">("concierge");
+  const [regFirstName, setRegFirstName] = useState("");
+  const [regLastName, setRegLastName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPhone, setRegPhone] = useState("");
+  const [regServices, setRegServices] = useState<string[]>([]);
+  const [regStep, setRegStep] = useState<1 | 2>(1);
 
   const fetchAll = async (silent = false) => {
     if (!dbData && !silent) setLoading(true);
@@ -2988,15 +3083,19 @@ export default function Home() {
   const handleRegister = async () => {
     if (!nickname.trim() || !password.trim()) { alert("Inserisci nickname e password."); return; }
     setLoading(true);
-    const res = await registerUser(nickname, password, isOwnerMode ? "owner" : "concierge");
+    const res = await registerUser(nickname, password, regRole, {
+      firstName: regFirstName, lastName: regLastName,
+      email: regEmail, phone: regPhone, services: regServices,
+    });
     if ((res as any).error) {
       alert((res as any).error);
       setLoading(false);
       return;
     }
-    alert("Registrazione inviata! Il tuo account è in attesa di approvazione da parte dell'admin. Ti verrà comunicato quando potrai accedere.");
+    alert("Registrazione inviata! Il tuo account è in attesa di approvazione dall'admin.");
     setIsRegister(false);
-    setPassword("");
+    setPassword(""); setRegFirstName(""); setRegLastName(""); setRegEmail(""); setRegPhone(""); setRegServices([]);
+    setRegStep(1);
     setLoading(false);
   };
 
@@ -3053,49 +3152,161 @@ export default function Home() {
     );
   }
 
+  const servicesList = regRole === "owner" ? OWNER_SERVICES : CONCIERGE_SERVICES;
+  const toggleService = (id: string) => setRegServices(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+
   if (!user) {
     return (
-      <div style={{ minHeight: "100vh", background: `linear-gradient(170deg, ${C.bg} 0%, #0D1117 50%, #0B0F14 100%)`, display: "flex", justifyContent: "center", alignItems: "center" }}>
-        <div style={{ width: 400, textAlign: "center" }}>
-          <div style={{ marginBottom: 36, display: "flex", justifyContent: "center" }}>
-            <img 
-              src={LOGO} 
-              alt="Aura Ibiza"
-              onClick={handleLogoTap}
-              style={{ height: 100, width: 100, borderRadius: "50%", objectFit: "cover", boxShadow: "0 8px 40px rgba(200,169,110,0.25)", cursor: "pointer", userSelect: "none" }} 
-            />
+      <div style={{
+        minHeight: "100vh",
+        background: `radial-gradient(ellipse at 20% 50%, rgba(200,169,110,0.06) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(74,126,196,0.04) 0%, transparent 50%), linear-gradient(170deg, ${C.bg} 0%, #0A0D12 60%, #080B0F 100%)`,
+        display: "flex", justifyContent: "center", alignItems: "center", padding: "20px",
+      }}>
+        <div style={{ width: "100%", maxWidth: isRegister ? 520 : 400, textAlign: "center" }}>
+          {/* Logo */}
+          <div style={{ marginBottom: 32, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <div style={{ position: "absolute", inset: -6, borderRadius: "50%", background: `conic-gradient(${C.gold}33 0deg, transparent 120deg, ${C.gold}22 240deg, transparent 360deg)`, animation: "spin 12s linear infinite" }} />
+              <img src={LOGO} alt="Aura Ibiza" style={{ height: 90, width: 90, borderRadius: "50%", objectFit: "cover", boxShadow: "0 0 40px rgba(200,169,110,0.2)", position: "relative" }} />
+            </div>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 28, fontWeight: 300, color: C.goldLight, letterSpacing: "5px", textTransform: "uppercase", lineHeight: 1 }}>Aura Ibiza</div>
+              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: "4px", textTransform: "uppercase", marginTop: 6 }}>Concierge Management</div>
+            </div>
           </div>
-          <form style={card} onSubmit={e => { e.preventDefault(); isRegister ? handleRegister() : handleLogin(); }}>
-            <h2 style={{ ...h2Style, textAlign: "center", marginBottom: 24, fontSize: 20 }}>
-              {isRegister ? (isOwnerMode ? "Crea Account Proprietario" : "Crea Account Concierge") : "Accesso Riservato"}
-            </h2>
-            <div style={{ marginBottom: 16 }}>
-              <label style={label}>Nickname</label>
-              <input style={input} value={nickname} onChange={e => setNickname(e.target.value)} placeholder="Inserisci nickname..." />
-            </div>
-            <div style={{ marginBottom: 24 }}>
-              <label style={label}>Password</label>
-              <input style={input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
-            </div>
-            
-            <button style={{ ...btn("gold"), width: "100%", padding: "12px 16px" }} type="submit">
-              {isRegister ? "Registrati" : "Accedi"}
-            </button>
 
-            <div style={{ marginTop: 20, textAlign: "center" }}>
-              <span style={{ fontSize: 13, color: C.textDim }}>
-                {isRegister ? "Hai già un account?" : "Non hai un account?"}
-              </span>
-              <button 
-                style={{ background: "none", border: "none", color: C.gold, fontSize: 13, cursor: "pointer", marginLeft: 8, padding: 0, textDecoration: "underline" }}
-                onClick={() => { setIsRegister(!isRegister); setPassword(""); }}
-              >
-                {isRegister ? "Accedi ora" : (isOwnerMode ? "Registrati come Proprietario" : "Registrati come Concierge")}
+          <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }` }} />
+
+          {/* Login form */}
+          {!isRegister && (
+            <div style={cardGlass}>
+              <h2 style={{ ...h2Style, textAlign: "center", marginBottom: 28, fontSize: 18, letterSpacing: "3px" }}>ACCESSO RISERVATO</h2>
+              <form onSubmit={e => { e.preventDefault(); handleLogin(); }}>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={label}>Nickname</label>
+                  <input style={input} value={nickname} onChange={e => setNickname(e.target.value)} placeholder="Il tuo nickname..." autoComplete="username" />
+                </div>
+                <div style={{ marginBottom: 28 }}>
+                  <label style={label}>Password</label>
+                  <input style={input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+                </div>
+                <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "2px" }} type="submit">Accedi</button>
+              </form>
+              <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${C.border}`, textAlign: "center" }}>
+                <span style={{ fontSize: 12, color: C.textDim }}>Non hai un account?</span>
+                <button style={{ background: "none", border: "none", color: C.gold, fontSize: 12, cursor: "pointer", marginLeft: 8, padding: 0, textDecoration: "underline" }} onClick={() => { setIsRegister(true); setRegStep(1); }}>
+                  Registrati
+                </button>
+              </div>
+              <div style={{ marginTop: 12, fontSize: 10, color: C.textDim, textAlign: "center", fontStyle: "italic" }}>L&apos;accesso è consentito solo agli utenti autorizzati.</div>
+            </div>
+          )}
+
+          {/* Registration form — Step 1: role */}
+          {isRegister && regStep === 1 && (
+            <div style={cardGlass}>
+              <h2 style={{ ...h2Style, textAlign: "center", marginBottom: 8, fontSize: 18, letterSpacing: "2px" }}>CREA ACCOUNT</h2>
+              <p style={{ color: C.textDim, fontSize: 12, marginBottom: 28, textAlign: "center" }}>Seleziona il tuo ruolo per personalizzare l&apos;accesso</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 28 }}>
+                {([
+                  { key: "owner", icon: "🏠", label: "Proprietario", desc: "Gestisco immobili e asset" },
+                  { key: "concierge", icon: "🤵", label: "Concierge", desc: "Gestisco prenotazioni clienti" },
+                  { key: "agent", icon: "🌐", label: "Agente", desc: "Collaboro con più owner" },
+                ] as const).map(r => (
+                  <button key={r.key} onClick={() => setRegRole(r.key)} type="button" style={{
+                    padding: "16px 12px", borderRadius: 12, cursor: "pointer", textAlign: "center",
+                    border: regRole === r.key ? `1px solid ${C.borderGold}` : `1px solid ${C.border}`,
+                    background: regRole === r.key ? C.goldGlow : "rgba(255,255,255,0.03)",
+                    color: regRole === r.key ? C.gold : C.textMuted, transition: "all 0.2s",
+                    fontFamily: FONT_B,
+                  }}>
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>{r.icon}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 4 }}>{r.label}</div>
+                    <div style={{ fontSize: 9, opacity: 0.7, lineHeight: 1.4 }}>{r.desc}</div>
+                  </button>
+                ))}
+              </div>
+              <button style={{ ...btn("gold"), width: "100%", padding: "13px 20px", fontSize: 12, letterSpacing: "1.5px" }} onClick={() => setRegStep(2)}>
+                Continua →
               </button>
+              <div style={{ marginTop: 20, textAlign: "center" }}>
+                <button style={{ background: "none", border: "none", color: C.textDim, fontSize: 12, cursor: "pointer", padding: 0, textDecoration: "underline" }} onClick={() => setIsRegister(false)}>
+                  ← Torna al login
+                </button>
+              </div>
             </div>
+          )}
 
-            {!isRegister && <div style={{ marginTop: 16, fontSize: 10, color: C.textDim, textAlign: "center", fontStyle: "italic" }}>L&apos;accesso è consentito solo agli utenti autorizzati.</div>}
-          </form>
+          {/* Registration form — Step 2: details + services */}
+          {isRegister && regStep === 2 && (
+            <div style={{ ...cardGlass, textAlign: "left", maxHeight: "85vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+                <button onClick={() => setRegStep(1)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, cursor: "pointer", padding: "6px 12px", fontFamily: FONT_B, fontSize: 11 }}>← Indietro</button>
+                <div>
+                  <div style={{ fontFamily: FONT, fontSize: 18, color: C.goldLight }}>Completa il profilo</div>
+                  <div style={{ fontSize: 10, color: C.textDim, textTransform: "uppercase", letterSpacing: "1px" }}>
+                    {{owner:"🏠 Proprietario", concierge:"🤵 Concierge", agent:"🌐 Agente"}[regRole]}
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={e => { e.preventDefault(); handleRegister(); }}>
+                {/* Credentials */}
+                <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>Credenziali di accesso</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div><label style={label}>Nickname *</label><input style={input} value={nickname} onChange={e => setNickname(e.target.value)} placeholder="es. mario_ibiza" autoComplete="username" /></div>
+                    <div><label style={label}>Password *</label><input style={input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="min. 6 caratteri" autoComplete="new-password" /></div>
+                  </div>
+                </div>
+
+                {/* Personal info */}
+                <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>Dati personali</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                    <div><label style={label}>Nome</label><input style={input} value={regFirstName} onChange={e => setRegFirstName(e.target.value)} placeholder="Mario" /></div>
+                    <div><label style={label}>Cognome</label><input style={input} value={regLastName} onChange={e => setRegLastName(e.target.value)} placeholder="Rossi" /></div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div><label style={label}>Email</label><input style={input} type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="mario@email.com" /></div>
+                    <div><label style={label}>Telefono / WhatsApp</label><input style={input} type="tel" value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="+39 340 ..." /></div>
+                  </div>
+                </div>
+
+                {/* Services */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 4 }}>
+                    {regRole === "owner" ? "Cosa offri?" : "Servizi offerti"}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textDim, marginBottom: 14 }}>
+                    {regRole === "owner" ? "Seleziona le tipologie di asset che gestisci" : "Seleziona i servizi che puoi fornire ai clienti"}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {servicesList.map(s => {
+                      const active = regServices.includes(s.id);
+                      return (
+                        <label key={s.id} style={{
+                          display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+                          border: active ? `1px solid ${C.borderGold}` : `1px solid ${C.border}`,
+                          background: active ? C.goldGlow : "rgba(255,255,255,0.02)", transition: "all 0.15s",
+                        }}>
+                          <input type="checkbox" checked={active} onChange={() => toggleService(s.id)} style={{ accentColor: C.gold, width: 14, height: 14 }} />
+                          <span style={{ fontSize: 12, color: active ? C.gold : C.textMuted, fontFamily: FONT_B, fontWeight: active ? 600 : 400 }}>{s.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "1.5px" }} type="submit">
+                  Invia Richiesta di Accesso
+                </button>
+                <p style={{ fontSize: 10, color: C.textDim, textAlign: "center", marginTop: 14, lineHeight: 1.6 }}>
+                  Il tuo account sarà attivato dall&apos;amministratore. Riceverai conferma prima di poter accedere.
+                </p>
+              </form>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -3103,15 +3314,23 @@ export default function Home() {
 
   return (
     <>
-      <div className="app-container" style={{ minHeight: "100vh", background: `linear-gradient(170deg, ${C.bg} 0%, #0D1117 50%, #0B0F14 100%)` }}>
-        <header className="no-print" style={{ padding: isMobile ? "8px 16px" : "12px 24px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(11,14,17,0.92)", backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 100 }}>
+      <div className="app-container" style={{ minHeight: "100vh", background: `linear-gradient(170deg, ${C.bg} 0%, #0A0D12 60%, #080B0F 100%)` }}>
+        <header className="no-print" style={{
+          padding: isMobile ? "10px 16px" : "14px 28px", borderBottom: `1px solid ${C.border}`,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: "rgba(8,11,15,0.97)", backdropFilter: "blur(24px)",
+          position: "sticky", top: 0, zIndex: 100,
+          boxShadow: "0 1px 20px rgba(0,0,0,0.4)",
+        }}>
           <LogoFull size={38} isMobile={isMobile} />
           <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 16 }}>
-            <span style={{ fontSize: isMobile ? 10 : 11, color: C.textMuted }}>
-              {({ admin: "👑", owner: "🏠", concierge: "🤵", agent: "👤" } as any)[user.role] || "👤"} <strong style={{ color: C.gold }}>{user.nickname}</strong>
-              {!isMobile && <span style={{ fontSize: 9, color: C.textDim, marginLeft: 6, textTransform: "uppercase" }}>{user.role}</span>}
-            </span>
-            <button style={{ ...btn(), padding: isMobile ? "4px 10px" : "8px 18px", fontSize: isMobile ? 10 : 12 }} onClick={() => setUser(null)}>Esci</button>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: isMobile ? 11 : 12, color: C.gold, fontWeight: 600 }}>
+                {({ admin: "👑", owner: "🏠", concierge: "🤵", agent: "🌐" } as any)[user.role] || "👤"} {user.nickname}
+              </div>
+              {!isMobile && <div style={{ fontSize: 9, color: C.textDim, textTransform: "uppercase", letterSpacing: "1.5px" }}>{user.role}</div>}
+            </div>
+            <button style={{ ...btn(), padding: isMobile ? "6px 12px" : "8px 18px", fontSize: 11 }} onClick={() => setUser(null)}>Esci</button>
           </div>
         </header>
         {user.role === "admin" && <div className="no-print"><AdminDashboard user={user} data={dbData} refresh={fetchAll} /></div>}
