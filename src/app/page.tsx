@@ -167,41 +167,66 @@ export default function LandingPage() {
         minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
         textAlign: "center", padding: "120px 24px 80px",
         background: `
-          linear-gradient(180deg, rgba(8,11,15,0.72) 0%, rgba(8,11,15,0.52) 45%, rgba(8,11,15,0.82) 100%),
-          radial-gradient(ellipse at 30% 40%, rgba(200,169,110,0.06) 0%, transparent 55%),
-          url('/hero-bg.jpg') center / cover no-repeat
+          radial-gradient(ellipse 120% 55% at 50% -5%, rgba(5,18,48,0.95) 0%, transparent 65%),
+          radial-gradient(ellipse 70% 50% at 88% 100%, rgba(160,90,10,0.55) 0%, transparent 55%),
+          radial-gradient(ellipse 55% 40% at 12% 85%, rgba(6,22,55,0.6) 0%, transparent 50%),
+          radial-gradient(ellipse 50% 35% at 50% 100%, rgba(120,65,8,0.45) 0%, transparent 55%),
+          radial-gradient(ellipse 80% 60% at 50% 50%, rgba(12,8,4,0.3) 0%, transparent 80%),
+          linear-gradient(165deg, #03060C 0%, #05091A 35%, #040608 70%, #060408 100%)
         `,
-        backgroundColor: C.bg,
         position: "relative", overflow: "hidden",
       }}>
-        {/* decorative lines */}
-        <div style={{ position: "absolute", top: "20%", left: "10%", width: 1, height: 120, background: `linear-gradient(to bottom, transparent, ${C.gold}33, transparent)` }} />
-        <div style={{ position: "absolute", top: "60%", right: "8%", width: 1, height: 80, background: `linear-gradient(to bottom, transparent, ${C.gold}22, transparent)` }} />
+        {/* stelle decorative */}
+        {[
+          { top:"12%", left:"8%", size:1.5 }, { top:"25%", left:"18%", size:1 },
+          { top:"8%", left:"72%", size:2 }, { top:"18%", right:"10%", size:1 },
+          { top:"45%", left:"5%", size:1 }, { top:"65%", right:"6%", size:1.5 },
+          { top:"30%", right:"22%", size:1 }, { top:"72%", left:"15%", size:1 },
+        ].map((s, i) => (
+          <div key={i} style={{
+            position: "absolute", top: s.top, left: (s as any).left, right: (s as any).right,
+            width: s.size, height: s.size, borderRadius: "50%",
+            background: "rgba(200,169,110,0.6)", animation: `pulse ${3 + i * 0.4}s ease infinite`,
+          }} />
+        ))}
+        {/* linea decorativa verticale sinistra */}
+        <div style={{ position: "absolute", top: "15%", left: "10%", width: 1, height: 140, background: "linear-gradient(to bottom, transparent, rgba(200,169,110,0.25), transparent)" }} />
+        <div style={{ position: "absolute", top: "55%", right: "8%", width: 1, height: 100, background: "linear-gradient(to bottom, transparent, rgba(200,169,110,0.18), transparent)" }} />
 
-        {/* Logo centrale grande con doppio anello */}
-        <div style={{ position: "relative", marginBottom: 44 }}>
-          {/* anello esterno lento */}
+        {/* Logo con anelli */}
+        <div style={{ position: "relative", display: "inline-flex", marginBottom: 44 }}>
+          {/* glow di sfondo */}
           <div style={{
-            position: "absolute", inset: -22, borderRadius: "50%",
-            background: `conic-gradient(${C.gold}18 0deg, transparent 80deg, ${C.gold}12 180deg, transparent 260deg, ${C.gold}18 360deg)`,
+            position: "absolute", top: -50, left: -50, right: -50, bottom: -50,
+            borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(200,169,110,0.14) 0%, rgba(200,169,110,0.04) 50%, transparent 70%)",
+            animation: "pulse 4s ease infinite",
+          }} />
+          {/* anello esterno — tratteggiato, lento */}
+          <div style={{
+            position: "absolute", top: -26, left: -26, right: -26, bottom: -26,
+            borderRadius: "50%",
+            border: "1px dashed rgba(200,169,110,0.35)",
             animation: "spin 28s linear infinite",
           }} />
-          {/* anello interno veloce inverso */}
+          {/* anello medio — continuo, verso opposto */}
           <div style={{
-            position: "absolute", inset: -10, borderRadius: "50%",
-            background: `conic-gradient(transparent 0deg, ${C.gold}30 60deg, transparent 120deg, transparent 180deg, ${C.gold}20 240deg, transparent 300deg)`,
-            animation: "spin 12s linear infinite reverse",
+            position: "absolute", top: -14, left: -14, right: -14, bottom: -14,
+            borderRadius: "50%",
+            border: "1px solid rgba(200,169,110,0.5)",
+            animation: "spin 16s linear infinite reverse",
           }} />
-          {/* glow dietro */}
+          {/* anello interno — sottile, veloce */}
           <div style={{
-            position: "absolute", inset: -30, borderRadius: "50%",
-            background: `radial-gradient(circle, ${C.gold}15 0%, transparent 70%)`,
-            animation: "pulse 4s ease infinite",
+            position: "absolute", top: -5, left: -5, right: -5, bottom: -5,
+            borderRadius: "50%",
+            border: "1px solid rgba(200,169,110,0.25)",
+            animation: "spin 8s linear infinite",
           }} />
           <img
             src="/logo.png"
             alt="Aura Ibiza"
-            style={{ height: 140, width: 140, borderRadius: "50%", objectFit: "cover", position: "relative", boxShadow: `0 0 60px rgba(200,169,110,0.22), 0 0 120px rgba(200,169,110,0.08)` }}
+            style={{ height: 140, width: 140, borderRadius: "50%", objectFit: "cover", position: "relative", zIndex: 1, boxShadow: "0 0 50px rgba(200,169,110,0.28), 0 0 100px rgba(200,169,110,0.1), 0 0 1px rgba(200,169,110,0.6)" }}
           />
         </div>
 
@@ -464,11 +489,11 @@ export default function LandingPage() {
               <span style={{ fontSize: 16 }}>✉</span>
               <span>info.auraibiza@gmail.com</span>
             </a>
-            <a href="https://wa.me/3454265430" target="_blank" rel="noopener noreferrer"
+            <a href="https://wa.me/34645265430" target="_blank" rel="noopener noreferrer"
               style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: C.textMuted, marginBottom: 12, textDecoration: "none", transition: "color 0.2s" }}
               onMouseEnter={e => (e.currentTarget.style.color = "#25D366")} onMouseLeave={e => (e.currentTarget.style.color = C.textMuted)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-              <span>+39 345 426 5430</span>
+              <span>+34 645 265 430</span>
             </a>
             <a href="https://www.instagram.com/_aura_ibiza_/" target="_blank" rel="noopener noreferrer"
               style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: C.textMuted, textDecoration: "none", transition: "color 0.2s" }}
