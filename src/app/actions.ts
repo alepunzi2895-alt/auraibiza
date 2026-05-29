@@ -66,6 +66,7 @@ export async function initDatabase() {
       "ALTER TABLE users ADD COLUMN email TEXT",
       "ALTER TABLE users ADD COLUMN phone TEXT",
       "ALTER TABLE users ADD COLUMN services TEXT",
+      "ALTER TABLE properties ADD COLUMN is_public INTEGER DEFAULT 1",
       "ALTER TABLE booking_requests ADD COLUMN referral_code TEXT",
       "ALTER TABLE booking_requests ADD COLUMN referral_user_id TEXT",
       "ALTER TABLE booking_requests ADD COLUMN platform_fee_rate REAL DEFAULT 0",
@@ -668,7 +669,7 @@ export async function registerUser(
 export async function getPublicListings() {
   try {
     await initDatabase();
-    const properties = await db.execute("SELECT id, name, location, description, image, asset_type FROM properties ORDER BY name ASC");
+    const properties = await db.execute("SELECT id, name, location, description, image, asset_type, is_public FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC");
     const rooms = await db.execute("SELECT id, property_id, name, capacity, image, description FROM rooms ORDER BY name ASC");
     const pricing = await db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id");
     return {
@@ -679,6 +680,15 @@ export async function getPublicListings() {
   } catch (error) {
     return { properties: [], rooms: [], pricing: [], error: String(error) };
   }
+}
+
+export async function togglePropertyPublic(propertyId: string, isPublic: boolean) {
+  try {
+    await db.execute({ sql: "UPDATE properties SET is_public = ? WHERE id = ?", args: [isPublic ? 1 : 0, propertyId] });
+    revalidatePath("/");
+    revalidatePath("/platform");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
 }
 
 export async function createBookingRequest(data: {

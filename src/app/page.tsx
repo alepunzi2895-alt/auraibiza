@@ -175,12 +175,34 @@ export default function LandingPage() {
         <div style={{ position: "absolute", top: "20%", left: "10%", width: 1, height: 120, background: `linear-gradient(to bottom, transparent, ${C.gold}33, transparent)` }} />
         <div style={{ position: "absolute", top: "60%", right: "8%", width: 1, height: 80, background: `linear-gradient(to bottom, transparent, ${C.gold}22, transparent)` }} />
 
-        <div style={{ position: "relative", marginBottom: 32 }}>
-          <div style={{ position: "absolute", inset: -10, borderRadius: "50%", background: `conic-gradient(${C.gold}22 0deg, transparent 90deg, ${C.gold}15 180deg, transparent 270deg, ${C.gold}22 360deg)`, animation: "spin 20s linear infinite" }} />
-          <img src="/logo.png" alt="Aura Ibiza" style={{ height: 100, width: 100, borderRadius: "50%", objectFit: "cover", position: "relative", boxShadow: `0 0 60px ${C.goldGlow}` }} />
+        {/* Logo centrale grande con doppio anello */}
+        <div style={{ position: "relative", marginBottom: 44 }}>
+          {/* anello esterno lento */}
+          <div style={{
+            position: "absolute", inset: -22, borderRadius: "50%",
+            background: `conic-gradient(${C.gold}18 0deg, transparent 80deg, ${C.gold}12 180deg, transparent 260deg, ${C.gold}18 360deg)`,
+            animation: "spin 28s linear infinite",
+          }} />
+          {/* anello interno veloce inverso */}
+          <div style={{
+            position: "absolute", inset: -10, borderRadius: "50%",
+            background: `conic-gradient(transparent 0deg, ${C.gold}30 60deg, transparent 120deg, transparent 180deg, ${C.gold}20 240deg, transparent 300deg)`,
+            animation: "spin 12s linear infinite reverse",
+          }} />
+          {/* glow dietro */}
+          <div style={{
+            position: "absolute", inset: -30, borderRadius: "50%",
+            background: `radial-gradient(circle, ${C.gold}15 0%, transparent 70%)`,
+            animation: "pulse 4s ease infinite",
+          }} />
+          <img
+            src="/logo.png"
+            alt="Aura Ibiza"
+            style={{ height: 180, width: 180, borderRadius: "50%", objectFit: "cover", position: "relative", boxShadow: `0 0 80px rgba(200,169,110,0.25), 0 0 160px rgba(200,169,110,0.1)` }}
+          />
         </div>
 
-        <div style={{ fontSize: 11, color: C.gold, letterSpacing: "6px", textTransform: "uppercase", marginBottom: 24, animation: "pulse 3s ease infinite" }}>
+        <div style={{ fontSize: 10, color: C.gold, letterSpacing: "8px", textTransform: "uppercase", marginBottom: 28, animation: "pulse 3s ease infinite" }}>
           Ibiza · Luxury Experience
         </div>
 

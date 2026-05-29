@@ -17,6 +17,7 @@ import {
   setCommissionRule, updatePropertyAssetType,
   getBookingRequests, updateBookingRequestStatus,
   getPlatformCommissions, upsertPlatformCommission, deletePlatformCommission,
+  togglePropertyPublic,
 } from "../actions";
 
 const calcSplit = (ownerPriceTotal: number, conciergeFee: number, rate: number) => {
@@ -1736,7 +1737,21 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                           </label>
                         </div>
                       </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 4 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 4, flexWrap: "wrap" }}>
+                        {/* Visibilità vetrina toggle */}
+                        <button
+                          title={prop.is_public === 0 ? "Nascoste dalla vetrina — clicca per rendere visibile" : "Visibile in vetrina — clicca per nascondere"}
+                          onClick={async () => { await togglePropertyPublic(prop.id, prop.is_public === 0); refresh(); }}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 6, cursor: "pointer",
+                            border: prop.is_public === 0 ? `1px solid ${C.textDim}` : `1px solid ${C.success}55`,
+                            background: prop.is_public === 0 ? "rgba(255,255,255,0.03)" : `${C.success}12`,
+                            color: prop.is_public === 0 ? C.textDim : C.success,
+                            fontFamily: FONT_B, fontSize: 10, fontWeight: 600, letterSpacing: "0.5px", textTransform: "uppercase", transition: "all 0.2s",
+                          }}>
+                          <span>{prop.is_public === 0 ? "🔒" : "🌐"}</span>
+                          <span>{prop.is_public === 0 ? "Nascosto" : "In vetrina"}</span>
+                        </button>
                         <button style={{ ...btn(), padding: "6px 12px", fontSize: 11 }} onClick={() => setEditProperty({ id: prop.id, name: prop.name, location: prop.location, description: prop.description || "" })}>✏️ Modifica</button>
                         <button style={{ ...btn(), padding: "6px 10px", fontSize: 14, borderColor: C.danger + "55", color: C.danger }} title="Elimina proprietà" onClick={async () => { if(confirm(`Eliminare la proprietà "${prop.name}" e tutte le sue camere/prenotazioni? Questa azione è irreversibile.`)) { await deletePropertyAction(prop.id); refresh(); } }}>🗑</button>
                         <span style={badge(C.goldLight)}>{propRooms.length} unità</span>
