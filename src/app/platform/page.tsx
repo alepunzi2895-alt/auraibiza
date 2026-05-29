@@ -64,6 +64,7 @@ const CONCIERGE_SERVICES = [
 ];
 
 const OWNER_SERVICES = [
+  { id: "properties", label: "Proprietà" },
   { id: "apartments", label: "Appartamenti" },
   { id: "villas", label: "Ville" },
   { id: "boats", label: "Barche / Yacht" },
