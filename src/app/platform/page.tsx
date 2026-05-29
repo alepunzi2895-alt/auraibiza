@@ -15,7 +15,14 @@ import {
   deletePropertyAction, deleteRoomAction,
   changePasswordAction, approveUser, rejectUser, updateUserRole, deleteUserAction,
   setCommissionRule, updatePropertyAssetType,
+  getBookingRequests, updateBookingRequestStatus,
+  getPlatformCommissions, upsertPlatformCommission, deletePlatformCommission,
 } from "../actions";
+
+const calcSplit = (ownerPriceTotal: number, conciergeFee: number, rate: number) => {
+  const platformFee = Math.round(ownerPriceTotal * rate / 100 * 100) / 100;
+  return { platformFee, ownerNet: Math.round((ownerPriceTotal - platformFee) * 100) / 100, total: ownerPriceTotal + conciergeFee };
+};
 
 // ============================================================
 // AURA IBIZA — Concierge Booking & Property Management
@@ -1214,6 +1221,23 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
         })()}
         {tab === "settings" && (
           <div>
+            {/* Referral link box */}
+            <div style={{ ...card, background: C.goldGlow, borderColor: C.borderGold, marginBottom: 16 }}>
+              <h3 style={h3Style}>🔗 Il Tuo Link Referral</h3>
+              <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 16, lineHeight: 1.7 }}>
+                Condividi questo link con i tuoi clienti. Ogni prenotazione ricevuta tramite il tuo link verrà associata al tuo account e tracciata nelle richieste.
+              </p>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, padding: "12px 16px", background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: "'DM Sans', monospace", fontSize: 13, color: C.gold, letterSpacing: "0.3px", minWidth: 200, wordBreak: "break-all" }}>
+                  {typeof window !== "undefined" ? `${window.location.origin}?ref=${user.nickname}` : `https://auraibiza.com?ref=${user.nickname}`}
+                </div>
+                <button style={btn("gold")} onClick={() => {
+                  const url = `${window.location.origin}?ref=${user.nickname}`;
+                  navigator.clipboard.writeText(url).then(() => setMsg("✓ Link copiato negli appunti!"));
+                }}>Copia Link</button>
+              </div>
+            </div>
+
             <div style={card}>
               <h2 style={h2Style}>⚙️ Impostazioni Metodi di Pagamento</h2>
               <p style={{ color: C.textDim, fontSize: 13, marginBottom: 20 }}>Gestisci i metodi di pagamento che potrai selezionare durante la registrazione degli incassi.</p>
@@ -1849,6 +1873,33 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
 
         {tab === "bookings" && (
           <div>
+
+            {/* Commission split summary — solo prenotazioni confermate */}
+            {(() => {
+              const confirmed = ownerBookings.filter((b: any) => ["confirmed_owner","evaso"].includes(b.status));
+              if (confirmed.length === 0) return null;
+              const totClient     = confirmed.reduce((s: number, b: any) => s + b.total_price, 0);
+              const totOwnerGross = confirmed.reduce((s: number, b: any) => s + b.owner_price_total, 0);
+              const totPlatFee    = confirmed.reduce((s: number, b: any) => s + (b.platform_fee || calcSplit(b.owner_price_total, b.concierge_fee, b.platform_fee_rate || 0).platformFee), 0);
+              const totOwnerNet   = totOwnerGross - totPlatFee;
+              const totConc       = confirmed.reduce((s: number, b: any) => s + b.concierge_fee, 0);
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 12, marginBottom: 24 }}>
+                  {[
+                    { label: "Totale Cliente",  value: totClient,     color: C.text },
+                    { label: "Owner Lordo",      value: totOwnerGross, color: C.textMuted },
+                    { label: "Fee Piattaforma",  value: totPlatFee,    color: C.danger },
+                    { label: "Owner Netto",      value: totOwnerNet,   color: C.success },
+                    { label: "Fee Concierge",    value: totConc,       color: C.gold },
+                  ].map(item => (
+                    <div key={item.label} style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px" }}>
+                      <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>{item.label}</div>
+                      <div style={{ fontFamily: FONT, fontSize: 22, fontWeight: 400, color: item.color }}>€{item.value.toFixed(2)}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
               <h2 style={{ ...h2Style, margin: 0 }}>Prenotazioni</h2>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -1893,7 +1944,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                   <thead>
                     <tr>
-                      {["Cliente", "App./Stanza", "Date", "Soggiorno", "Pulizie", "Owner", "Fee", "Totale", "Incasso", "Preventivo", "Status", "Azioni", "Note", ""].map((h, i) => (
+                      {["Cliente", "App./Stanza", "Date", "Soggiorno", "Pulizie", "Owner Lordo", "Fee Piatt.", "Owner Netto", "Fee Conc.", "Totale Cliente", "Incasso", "Preventivo", "Status", "Azioni", "Note"].map((h, i) => (
                         <th key={i} style={{ ...th, fontSize: 9 }}>{h}</th>
                       ))}
                     </tr>
@@ -1925,7 +1976,18 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                       </td>
                       <td style={td}>€{b.stay_price_total}</td>
                       <td style={td}>€{b.cleaning_fee_total}</td>
-                      <td style={{ ...td, fontWeight: 600, color: C.success }}>€{b.owner_price_total}</td>
+                      <td style={{ ...td, color: C.text }}>€{b.owner_price_total}</td>
+                      <td style={{ ...td, fontSize: 10 }}>
+                        {b.platform_fee_rate > 0 ? (
+                          <div>
+                            <span style={{ color: C.danger }}>-€{(b.platform_fee || calcSplit(b.owner_price_total, b.concierge_fee, b.platform_fee_rate).platformFee).toFixed(2)}</span>
+                            <div style={{ fontSize: 8, color: C.textDim }}>{b.platform_fee_rate}%</div>
+                          </div>
+                        ) : <span style={{ color: C.textDim }}>—</span>}
+                      </td>
+                      <td style={{ ...td, fontWeight: 700, color: C.success }}>
+                        €{b.platform_fee_rate > 0 ? calcSplit(b.owner_price_total, b.concierge_fee, b.platform_fee_rate).ownerNet.toFixed(2) : b.owner_price_total}
+                      </td>
                       <td style={{ ...td, color: C.gold, fontSize: 10 }}>
                         €{b.concierge_fee}
                         <div style={{ fontSize: 8, opacity: 0.7 }}>({data.users.find((u:any)=>u.id===b.concierge_id)?.nickname || "Conc."})</div>
@@ -2736,6 +2798,23 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
         })()}
         {tab === "settings" && (
           <div>
+            {/* Referral link — owner */}
+            <div style={{ ...card, background: C.goldGlow, borderColor: C.borderGold, marginBottom: 16 }}>
+              <h3 style={h3Style}>🔗 Il Tuo Link Referral</h3>
+              <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 16, lineHeight: 1.7 }}>
+                Condividi questo link con i tuoi clienti. Le richieste ricevute vengono associate al tuo account e tracciate nella sezione Richieste Clienti.
+              </p>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, padding: "12px 16px", background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: "'DM Sans', monospace", fontSize: 13, color: C.gold, minWidth: 200, wordBreak: "break-all" }}>
+                  {typeof window !== "undefined" ? `${window.location.origin}?ref=${user.nickname}` : `https://auraibiza.com?ref=${user.nickname}`}
+                </div>
+                <button style={btn("gold")} onClick={() => {
+                  const url = `${window.location.origin}?ref=${user.nickname}`;
+                  navigator.clipboard.writeText(url).then(() => setMsg("✓ Link copiato!"));
+                }}>Copia Link</button>
+              </div>
+            </div>
+
             <div style={card}>
               <h2 style={h2Style}>⚙️ Impostazioni Metodi di Pagamento</h2>
               <p style={{ color: C.textDim, fontSize: 13, marginBottom: 20 }}>Gestisci i metodi di pagamento che potrai selezionare durante la verifica degli incassi.</p>
@@ -2831,6 +2910,26 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
   const [msg, setMsg] = useState("");
   const [commRates, setCommRates] = useState<Record<string, string>>({});
 
+  // Platform commissions state
+  const [platComms, setPlatComms] = useState<any[]>([]);
+  const [newCommOwnerId, setNewCommOwnerId] = useState<string>("__global__");
+  const [newCommAssetType, setNewCommAssetType] = useState<string>("__all__");
+  const [newCommRate, setNewCommRate] = useState("10");
+
+  // Booking requests state
+  const [bookingReqs, setBookingReqs] = useState<any[]>([]);
+  const [reqFilter, setReqFilter] = useState("all");
+
+  useEffect(() => {
+    if (tab === "platform") {
+      getPlatformCommissions().then(setPlatComms);
+      getBookingRequests().then(setBookingReqs);
+    }
+    if (tab === "requests") {
+      getBookingRequests().then(setBookingReqs);
+    }
+  }, [tab]);
+
   const allUsers: User[] = data.users || [];
   const pendingUsers: User[] = data.pendingUsers || [];
   const commissionRules: any[] = data.commissionRules || [];
@@ -2873,7 +2972,14 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
   return (
     <div>
       <div style={nav}>
-        {[{ key: "users", l: "👥 Utenti" }, { key: "pending", l: `⏳ In Attesa${pendingUsers.length > 0 ? ` (${pendingUsers.length})` : ""}` }, { key: "commissions", l: "💰 Commissioni" }, { key: "overview", l: "📊 Overview" }].map(t => (
+        {[
+          { key: "users", l: "👥 Utenti" },
+          { key: "pending", l: `⏳ In Attesa${pendingUsers.length > 0 ? ` (${pendingUsers.length})` : ""}` },
+          { key: "requests", l: "📥 Richieste Clienti" },
+          { key: "platform", l: "⚙️ Commissioni" },
+          { key: "commissions", l: "💰 Fee Concierge" },
+          { key: "overview", l: "📊 Overview" },
+        ].map(t => (
           <div key={t.key} style={navItem(tab === t.key)} onClick={() => setTab(t.key)}>{t.l}</div>
         ))}
       </div>
@@ -2933,6 +3039,161 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
                   </tr>
                 ))}</tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {tab === "requests" && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+              <h2 style={h2Style}>Richieste dal Sito</h2>
+              <div style={{ display: "flex", gap: 8 }}>
+                {["all","new","read","replied","declined"].map(s => (
+                  <button key={s} onClick={() => setReqFilter(s)} style={{ ...btn(reqFilter === s ? "gold" : "default"), padding: "6px 14px", fontSize: 10 }}>
+                    {s === "all" ? "Tutte" : s === "new" ? "Nuove" : s === "read" ? "Lette" : s === "replied" ? "Risposte" : "Rifiutate"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {bookingReqs.filter((r: any) => reqFilter === "all" || r.status === reqFilter).length === 0 ? (
+              <div style={{ ...card, textAlign: "center", color: C.textDim, padding: 48 }}>Nessuna richiesta trovata.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {bookingReqs.filter((r: any) => reqFilter === "all" || r.status === reqFilter).map((req: any) => {
+                  const statusColors: Record<string, string> = { new: C.warning, read: C.info, replied: C.success, declined: C.danger };
+                  const statusLabels: Record<string, string> = { new: "Nuova", read: "Letta", replied: "Risposta inviata", declined: "Rifiutata" };
+                  const split = req.platform_fee_rate > 0 && req.guests
+                    ? null // full calc needs total which we don't have yet
+                    : null;
+                  return (
+                    <div key={req.id} style={{ ...card, borderLeft: `4px solid ${statusColors[req.status] || C.border}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                            <div style={{ fontFamily: FONT, fontSize: 18, color: C.goldLight }}>{req.client_name}</div>
+                            <span style={badge(statusColors[req.status] || C.textDim)}>{statusLabels[req.status] || req.status}</span>
+                            {req.referral_code && <span style={{ ...badge(C.info), gap: 4 }}>🤝 via {req.referral_code}</span>}
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8, fontSize: 12 }}>
+                            {req.property_name && <div><span style={{ color: C.textDim }}>Proprietà:</span> <strong style={{ color: C.text }}>{req.property_name}</strong></div>}
+                            {req.room_name && <div><span style={{ color: C.textDim }}>Unità:</span> <strong style={{ color: C.text }}>{req.room_name}</strong></div>}
+                            {req.client_email && <div><span style={{ color: C.textDim }}>Email:</span> <a href={`mailto:${req.client_email}`} style={{ color: C.gold }}>{req.client_email}</a></div>}
+                            {req.client_phone && <div><span style={{ color: C.textDim }}>Tel:</span> <a href={`tel:${req.client_phone}`} style={{ color: C.gold }}>{req.client_phone}</a></div>}
+                            {req.check_in && <div><span style={{ color: C.textDim }}>Check-in:</span> <strong>{req.check_in}</strong></div>}
+                            {req.check_out && <div><span style={{ color: C.textDim }}>Check-out:</span> <strong>{req.check_out}</strong></div>}
+                            {req.guests > 1 && <div><span style={{ color: C.textDim }}>Ospiti:</span> <strong>{req.guests}</strong></div>}
+                            {req.platform_fee_rate > 0 && <div><span style={{ color: C.textDim }}>Comm. piattaforma:</span> <strong style={{ color: C.gold }}>{req.platform_fee_rate}%</strong></div>}
+                          </div>
+                          {req.message && <div style={{ marginTop: 12, padding: "10px 14px", background: C.surfaceAlt, borderRadius: 8, fontSize: 12, color: C.textMuted, fontStyle: "italic", borderLeft: `2px solid ${C.border}` }}>"{req.message}"</div>}
+                          <div style={{ fontSize: 10, color: C.textDim, marginTop: 8 }}>Ricevuta il {new Date(req.created_at).toLocaleDateString("it-IT", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 120 }}>
+                          <select style={{ ...sel, padding: "6px 10px", fontSize: 11 }} value={req.status} onChange={async e => { await updateBookingRequestStatus(req.id, e.target.value); getBookingRequests().then(setBookingReqs); }}>
+                            <option value="new">Nuova</option>
+                            <option value="read">Letta</option>
+                            <option value="replied">Risposta inviata</option>
+                            <option value="declined">Rifiutata</option>
+                          </select>
+                          {req.client_email && <a href={`mailto:${req.client_email}?subject=Aura Ibiza – Risposta alla tua richiesta`} style={{ ...btn("gold"), textDecoration: "none", textAlign: "center", padding: "7px 12px", fontSize: 10 }}>✉ Rispondi</a>}
+                          {req.client_phone && <a href={`https://wa.me/${req.client_phone.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{ ...btn(), textDecoration: "none", textAlign: "center", padding: "7px 12px", fontSize: 10, borderColor: "#25D366", color: "#25D366" }}>WhatsApp</a>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "platform" && (
+          <div>
+            <h2 style={h2Style}>Commissioni Piattaforma</h2>
+            <p style={{ color: C.textDim, fontSize: 13, marginBottom: 28, lineHeight: 1.7 }}>
+              Configura la percentuale che la piattaforma trattiene su ogni prenotazione. La commissione si applica sull&apos;importo owner (non sulla fee concierge).<br />
+              <strong style={{ color: C.gold }}>Priorità:</strong> Owner+Tipo &gt; Solo Owner &gt; Solo Tipo &gt; Default globale
+            </p>
+
+            {/* Add new commission */}
+            <div style={{ ...card, borderColor: C.borderGold, marginBottom: 28 }}>
+              <h3 style={h3Style}>Aggiungi / Aggiorna Regola</h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 120px auto", gap: 12, alignItems: "flex-end" }}>
+                <div>
+                  <label style={label}>Owner</label>
+                  <select style={sel} value={newCommOwnerId} onChange={e => setNewCommOwnerId(e.target.value)}>
+                    <option value="__global__">🌐 Default globale</option>
+                    {(data.users || []).filter((u: any) => u.role === "owner").map((u: any) => (
+                      <option key={u.id} value={u.id}>🏠 {u.nickname}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={label}>Tipo asset</label>
+                  <select style={sel} value={newCommAssetType} onChange={e => setNewCommAssetType(e.target.value)}>
+                    <option value="__all__">Tutti i tipi</option>
+                    <option value="apartment">🏠 Appartamento</option>
+                    <option value="villa">🏡 Villa</option>
+                    <option value="boat">⛵ Barca</option>
+                    <option value="car">🚗 Auto</option>
+                    <option value="scooter">🛵 Scooter</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={label}>% Commissione</label>
+                  <input style={input} type="number" min="0" max="50" step="0.5" value={newCommRate} onChange={e => setNewCommRate(e.target.value)} placeholder="es. 10" />
+                </div>
+                <div>
+                  <button style={{ ...btn("gold"), padding: "11px 20px" }} onClick={async () => {
+                    const ownerId = newCommOwnerId === "__global__" ? null : newCommOwnerId;
+                    const assetType = newCommAssetType === "__all__" ? null : newCommAssetType;
+                    const rate = parseFloat(newCommRate);
+                    if (isNaN(rate) || rate < 0) { setMsg("⚠ Percentuale non valida"); return; }
+                    const res = await upsertPlatformCommission(ownerId, assetType, rate);
+                    if ((res as any).success) { setMsg("Regola salvata"); getPlatformCommissions().then(setPlatComms); }
+                    else setMsg("⚠ Errore: " + (res as any).error);
+                  }}>Salva Regola</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Commission rules table */}
+            {platComms.length === 0 ? (
+              <div style={{ ...card, textAlign: "center", color: C.textDim, padding: 40 }}>Nessuna regola configurata. Aggiungi un default globale per iniziare.</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead><tr>
+                    {["Owner", "Tipo Asset", "Commissione %", "Esempio su €1000", ""].map(h => <th key={h} style={th}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {platComms.map((c: any) => (
+                      <tr key={c.id}>
+                        <td style={td}>{c.owner_nickname ? <><span style={{ color: C.gold }}>🏠 {c.owner_nickname}</span></> : <span style={{ color: C.textDim }}>🌐 Default globale</span>}</td>
+                        <td style={td}>{c.asset_type ? <span style={{ color: C.text }}>{c.asset_type}</span> : <span style={{ color: C.textDim }}>Tutti i tipi</span>}</td>
+                        <td style={{ ...td, fontFamily: FONT, fontSize: 18, color: C.gold }}>{c.rate}%</td>
+                        <td style={td}>
+                          <div style={{ fontSize: 11, lineHeight: 1.8 }}>
+                            <div>Owner incassa: <strong style={{ color: C.success }}>€{(1000 - 1000 * c.rate / 100).toFixed(0)}</strong></div>
+                            <div>Piattaforma: <strong style={{ color: C.gold }}>€{(1000 * c.rate / 100).toFixed(0)}</strong></div>
+                          </div>
+                        </td>
+                        <td style={td}><button style={{ ...btn(), color: C.danger, padding: "4px 10px", fontSize: 10, borderColor: C.danger + "44" }} onClick={async () => { await deletePlatformCommission(c.id); getPlatformCommissions().then(setPlatComms); setMsg("Regola eliminata"); }}>Elimina</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Referral info box */}
+            <div style={{ ...card, marginTop: 28, background: C.goldGlow, borderColor: C.borderGold }}>
+              <h3 style={h3Style}>🔗 Come funziona il referral</h3>
+              <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 2 }}>
+                <div>• Ogni concierge/agente ha un link referral personale: <code style={{ color: C.gold, background: C.surfaceAlt, padding: "2px 8px", borderRadius: 4 }}>auraibiza.com?ref=<em>nickname</em></code></div>
+                <div>• Il cliente arriva sul sito, clicca "Richiedi" — la richiesta viene associata automaticamente all&apos;agente</div>
+                <div>• La piattaforma incassa il totale e distribuisce: owner (prezzo base − commissione piattaforma) + concierge/agente (fee referral) + piattaforma (commissione %)</div>
+                <div>• Lo split viene calcolato e registrato in ogni prenotazione nella sezione pagamenti</div>
+              </div>
             </div>
           </div>
         )}

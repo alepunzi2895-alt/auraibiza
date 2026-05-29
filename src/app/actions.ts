@@ -41,6 +41,7 @@ export async function initDatabase() {
       `CREATE TABLE IF NOT EXISTS user_payment_methods (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS commission_rules (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, rate REAL NOT NULL, mode TEXT NOT NULL DEFAULT 'percentage', created_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS booking_requests (id TEXT PRIMARY KEY, property_id TEXT, room_id TEXT, client_name TEXT NOT NULL, client_email TEXT, client_phone TEXT, check_in TEXT, check_out TEXT, guests INTEGER DEFAULT 1, message TEXT, status TEXT DEFAULT 'new', created_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS platform_commissions (id TEXT PRIMARY KEY, owner_id TEXT, asset_type TEXT, rate REAL NOT NULL, created_at INTEGER NOT NULL)`,
     ], "write");
 
     // Migrations for existing tables
@@ -65,6 +66,12 @@ export async function initDatabase() {
       "ALTER TABLE users ADD COLUMN email TEXT",
       "ALTER TABLE users ADD COLUMN phone TEXT",
       "ALTER TABLE users ADD COLUMN services TEXT",
+      "ALTER TABLE booking_requests ADD COLUMN referral_code TEXT",
+      "ALTER TABLE booking_requests ADD COLUMN referral_user_id TEXT",
+      "ALTER TABLE booking_requests ADD COLUMN platform_fee_rate REAL DEFAULT 0",
+      "ALTER TABLE bookings ADD COLUMN platform_fee REAL DEFAULT 0",
+      "ALTER TABLE bookings ADD COLUMN platform_fee_rate REAL DEFAULT 0",
+      "ALTER TABLE bookings ADD COLUMN referral_user_id TEXT",
     ];
     for (const sql of migrations) {
       try { await db.execute(sql); } catch (_e) {}
@@ -274,9 +281,24 @@ export async function setCommissionRule(userId: string, rate: number, mode: stri
 export async function createBooking(data: any) {
   try {
     const id = `b${uid()}`;
+    // Auto-lookup platform commission rate
+    let platformFeeRate = 0;
+    let platformFee = 0;
+    try {
+      const roomRes = await db.execute({ sql: "SELECT property_id FROM rooms WHERE id = ?", args: [data.room_id] });
+      if (roomRes.rows.length > 0) {
+        const propId = (roomRes.rows[0] as any).property_id;
+        const propRes = await db.execute({ sql: "SELECT owner_id, asset_type FROM properties WHERE id = ?", args: [propId] });
+        if (propRes.rows.length > 0) {
+          const { owner_id, asset_type } = propRes.rows[0] as any;
+          platformFeeRate = await getEffectiveCommissionRate(owner_id, asset_type);
+          platformFee = Math.round((data.owner_price_total || 0) * platformFeeRate / 100 * 100) / 100;
+        }
+      }
+    } catch (_e) {}
     await db.execute({
-      sql: "INSERT INTO bookings (id, room_id, concierge_id, client_name, client_surname, start_date, end_date, notes, owner_price_total, concierge_fee, total_price, status, stay_price_total, cleaning_fee_total, guests_count, fee_mode, fee_value, asset_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      args: [id, data.room_id, data.concierge_id, data.client_name, data.client_surname || "", data.start_date, data.end_date, data.notes || "", data.owner_price_total, data.concierge_fee, data.total_price, "draft", data.stay_price_total || 0, data.cleaning_fee_total || 0, data.guests_count || 1, data.fee_mode || 'per_night', data.fee_value || 0, data.asset_type || 'apartment', Date.now()],
+      sql: "INSERT INTO bookings (id, room_id, concierge_id, client_name, client_surname, start_date, end_date, notes, owner_price_total, concierge_fee, total_price, status, stay_price_total, cleaning_fee_total, guests_count, fee_mode, fee_value, asset_type, platform_fee, platform_fee_rate, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      args: [id, data.room_id, data.concierge_id, data.client_name, data.client_surname || "", data.start_date, data.end_date, data.notes || "", data.owner_price_total, data.concierge_fee, data.total_price, "draft", data.stay_price_total || 0, data.cleaning_fee_total || 0, data.guests_count || 1, data.fee_mode || 'per_night', data.fee_value || 0, data.asset_type || 'apartment', platformFee, platformFeeRate, Date.now()],
     });
     revalidatePath("/");
     return { id };
@@ -663,11 +685,27 @@ export async function createBookingRequest(data: {
   propertyId?: string; roomId?: string;
   clientName: string; clientEmail?: string; clientPhone?: string;
   checkIn?: string; checkOut?: string; guests?: number; message?: string;
+  referralCode?: string;
 }) {
   try {
+    // Resolve referral code → user id
+    let referralUserId: string | null = null;
+    if (data.referralCode) {
+      const ref = await db.execute({ sql: "SELECT id FROM users WHERE nickname = ? AND status = 'active'", args: [data.referralCode.toLowerCase().trim()] });
+      if (ref.rows.length > 0) referralUserId = (ref.rows[0] as any).id;
+    }
+    // Resolve commission rate for this property
+    let platformFeeRate = 0;
+    if (data.propertyId) {
+      const propRes = await db.execute({ sql: "SELECT owner_id, asset_type FROM properties WHERE id = ?", args: [data.propertyId] });
+      if (propRes.rows.length > 0) {
+        const { owner_id, asset_type } = propRes.rows[0] as any;
+        platformFeeRate = await getEffectiveCommissionRate(owner_id, asset_type);
+      }
+    }
     await db.execute({
-      sql: "INSERT INTO booking_requests (id, property_id, room_id, client_name, client_email, client_phone, check_in, check_out, guests, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)",
-      args: [uid(), data.propertyId || null, data.roomId || null, data.clientName, data.clientEmail || null, data.clientPhone || null, data.checkIn || null, data.checkOut || null, data.guests || 1, data.message || null, Date.now()],
+      sql: "INSERT INTO booking_requests (id, property_id, room_id, client_name, client_email, client_phone, check_in, check_out, guests, message, status, referral_code, referral_user_id, platform_fee_rate, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?)",
+      args: [uid(), data.propertyId || null, data.roomId || null, data.clientName, data.clientEmail || null, data.clientPhone || null, data.checkIn || null, data.checkOut || null, data.guests || 1, data.message || null, data.referralCode || null, referralUserId, platformFeeRate, Date.now()],
     });
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
@@ -683,6 +721,69 @@ export async function getBookingRequests() {
 export async function updateBookingRequestStatus(id: string, status: string) {
   try {
     await db.execute({ sql: "UPDATE booking_requests SET status = ? WHERE id = ?", args: [status, id] });
+    revalidatePath("/platform");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+// --- PLATFORM COMMISSIONS ---
+
+export async function getEffectiveCommissionRate(ownerId: string, assetType: string): Promise<number> {
+  try {
+    // Priority: owner+type > owner only > type only > global default
+    const checks = [
+      { sql: "SELECT rate FROM platform_commissions WHERE owner_id = ? AND asset_type = ? LIMIT 1", args: [ownerId, assetType] },
+      { sql: "SELECT rate FROM platform_commissions WHERE owner_id = ? AND asset_type IS NULL LIMIT 1", args: [ownerId] },
+      { sql: "SELECT rate FROM platform_commissions WHERE owner_id IS NULL AND asset_type = ? LIMIT 1", args: [assetType] },
+      { sql: "SELECT rate FROM platform_commissions WHERE owner_id IS NULL AND asset_type IS NULL LIMIT 1", args: [] },
+    ];
+    for (const check of checks) {
+      const res = await db.execute(check as any);
+      if (res.rows.length > 0) return (res.rows[0] as any).rate as number;
+    }
+    return 0;
+  } catch { return 0; }
+}
+
+export async function getPlatformCommissions() {
+  try {
+    const res = await db.execute(`
+      SELECT pc.*, u.nickname as owner_nickname
+      FROM platform_commissions pc
+      LEFT JOIN users u ON pc.owner_id = u.id
+      ORDER BY pc.owner_id IS NULL, pc.asset_type IS NULL, u.nickname
+    `);
+    return res.rows;
+  } catch { return []; }
+}
+
+export async function upsertPlatformCommission(ownerId: string | null, assetType: string | null, rate: number) {
+  try {
+    const existing = await db.execute({
+      sql: "SELECT id FROM platform_commissions WHERE (owner_id IS ? OR (owner_id IS NULL AND ? IS NULL)) AND (asset_type IS ? OR (asset_type IS NULL AND ? IS NULL))",
+      args: [ownerId, ownerId, assetType, assetType],
+    });
+    if (existing.rows.length > 0) {
+      await db.execute({ sql: "UPDATE platform_commissions SET rate = ? WHERE id = ?", args: [rate, (existing.rows[0] as any).id] });
+    } else {
+      await db.execute({ sql: "INSERT INTO platform_commissions (id, owner_id, asset_type, rate, created_at) VALUES (?, ?, ?, ?, ?)", args: [uid(), ownerId, assetType, rate, Date.now()] });
+    }
+    revalidatePath("/platform");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function deletePlatformCommission(id: string) {
+  try {
+    await db.execute({ sql: "DELETE FROM platform_commissions WHERE id = ?", args: [id] });
+    revalidatePath("/platform");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function updateBookingPlatformFee(bookingId: string, platformFee: number, platformFeeRate: number) {
+  try {
+    await db.execute({ sql: "UPDATE bookings SET platform_fee = ?, platform_fee_rate = ? WHERE id = ?", args: [platformFee, platformFeeRate, bookingId] });
     revalidatePath("/platform");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }

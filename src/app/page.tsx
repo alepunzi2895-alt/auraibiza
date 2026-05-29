@@ -64,6 +64,7 @@ export default function LandingPage() {
   const [activeCat, setActiveCat] = useState("all");
   const [modal, setModal] = useState<{ property: any; room: any } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
 
   // Form state
   const [form, setForm] = useState({ name:"", email:"", phone:"", checkIn:"", checkOut:"", guests:"1", message:"" });
@@ -73,6 +74,16 @@ export default function LandingPage() {
 
   useEffect(() => {
     getPublicListings().then(setListings);
+    // Capture referral code from URL ?ref=nickname
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref) {
+      setReferralCode(ref);
+      sessionStorage.setItem("aura_ref", ref);
+    } else {
+      const stored = sessionStorage.getItem("aura_ref");
+      if (stored) setReferralCode(stored);
+    }
   }, []);
 
   const filteredProperties = useMemo(() => {
@@ -97,6 +108,7 @@ export default function LandingPage() {
       clientName: form.name, clientEmail: form.email, clientPhone: form.phone,
       checkIn: form.checkIn, checkOut: form.checkOut,
       guests: parseInt(form.guests) || 1, message: form.message,
+      referralCode: referralCode || undefined,
     });
     setSending(false);
     if (res.success) { setSent(true); }
@@ -430,6 +442,11 @@ export default function LandingPage() {
                   <div style={{ fontSize: 10, color: C.gold, letterSpacing: "3px", textTransform: "uppercase", marginBottom: 8 }}>Richiesta Disponibilità</div>
                   <h3 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 300, color: C.goldLight, marginBottom: 4 }}>{modal.property?.name}</h3>
                   {modal.room && <div style={{ fontSize: 13, color: C.textMuted }}>Unità: <strong style={{ color: C.gold }}>{modal.room.name}</strong></div>}
+                  {referralCode && (
+                    <div style={{ marginTop: 12, padding: "8px 14px", background: "rgba(200,169,110,0.08)", border: `1px solid ${C.borderGold}`, borderRadius: 8, fontSize: 11, color: C.textMuted, display: "flex", alignItems: "center", gap: 8 }}>
+                      <span>🤝</span> Stai prenotando tramite il concierge <strong style={{ color: C.gold }}>{referralCode}</strong>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
