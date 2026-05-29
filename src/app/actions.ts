@@ -767,19 +767,29 @@ export async function registerUser(
 }
 
 // --- PUBLIC LISTING (no auth required) ---
-export async function getPublicListings() {
+export async function getPublicListings(referralCode?: string) {
   try {
     await initDatabase();
-    const properties = await db.execute("SELECT id, name, location, description, image, asset_type, is_public FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC");
+    // Se il referral è valido (utente attivo), mostra anche asset privati
+    let showAll = false;
+    if (referralCode) {
+      const refUser = await db.execute({ sql: "SELECT id FROM users WHERE nickname = ? AND status = 'active'", args: [referralCode.toLowerCase().trim()] });
+      showAll = refUser.rows.length > 0;
+    }
+    const propertiesSQL = showAll
+      ? "SELECT id, name, location, description, image, asset_type, is_public FROM properties ORDER BY name ASC"
+      : "SELECT id, name, location, description, image, asset_type, is_public FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
+    const properties = await db.execute(propertiesSQL);
     const rooms = await db.execute("SELECT id, property_id, name, capacity, image, description FROM rooms ORDER BY name ASC");
     const pricing = await db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id");
     return {
       properties: properties.rows,
       rooms: rooms.rows,
       pricing: pricing.rows,
+      referralValid: showAll,
     };
   } catch (error) {
-    return { properties: [], rooms: [], pricing: [], error: String(error) };
+    return { properties: [], rooms: [], pricing: [], referralValid: false, error: String(error) };
   }
 }
 

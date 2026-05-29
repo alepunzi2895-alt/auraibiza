@@ -60,11 +60,12 @@ const labelStyle: CSSProperties = {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function LandingPage() {
-  const [listings, setListings] = useState<any>({ properties: [], rooms: [], pricing: [] });
+  const [listings, setListings] = useState<any>({ properties: [], rooms: [], pricing: [], referralValid: false });
   const [activeCat, setActiveCat] = useState("all");
   const [modal, setModal] = useState<{ property: any; room: any } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referralReady, setReferralReady] = useState(false);
 
   // Form state
   const [form, setForm] = useState({ name:"", email:"", phone:"", checkIn:"", checkOut:"", guests:"1", message:"" });
@@ -72,9 +73,8 @@ export default function LandingPage() {
   const [sent, setSent] = useState(false);
   const [formErr, setFormErr] = useState("");
 
+  // Step 1: capture referral code from URL/sessionStorage
   useEffect(() => {
-    getPublicListings().then(setListings);
-    // Capture referral code from URL ?ref=nickname
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("ref");
     if (ref) {
@@ -84,7 +84,14 @@ export default function LandingPage() {
       const stored = sessionStorage.getItem("aura_ref");
       if (stored) setReferralCode(stored);
     }
+    setReferralReady(true);
   }, []);
+
+  // Step 2: fetch listings once referral code is known (pass it to show hidden assets)
+  useEffect(() => {
+    if (!referralReady) return;
+    getPublicListings(referralCode || undefined).then(setListings);
+  }, [referralReady, referralCode]);
 
   const filteredProperties = useMemo(() => {
     const cat = ASSET_CATS.find(c => c.key === activeCat);
@@ -162,10 +169,28 @@ export default function LandingPage() {
         </nav>
       </header>
 
+      {/* Banner accesso esclusivo via referral */}
+      {listings.referralValid && referralCode && (
+        <div style={{
+          position: "fixed", top: 68, left: 0, right: 0, zIndex: 150,
+          background: `linear-gradient(90deg, rgba(200,169,110,0.12) 0%, rgba(200,169,110,0.08) 50%, rgba(200,169,110,0.12) 100%)`,
+          backdropFilter: "blur(12px)",
+          borderBottom: `1px solid rgba(200,169,110,0.25)`,
+          padding: "10px 24px",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+        }}>
+          <span style={{ fontSize: 14 }}>✨</span>
+          <span style={{ fontSize: 12, color: C.goldLight, fontFamily: FONT_B, letterSpacing: "0.5px" }}>
+            Stai esplorando il portfolio esclusivo di <strong style={{ color: C.gold }}>{referralCode}</strong> — inclusi gli asset riservati non visibili al pubblico
+          </span>
+          <span style={{ fontSize: 14 }}>✨</span>
+        </div>
+      )}
+
       {/* ── HERO ───────────────────────────────────────────────────────────── */}
       <section style={{
         minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
-        textAlign: "center", padding: "120px 24px 80px",
+        textAlign: "center", padding: `${listings.referralValid ? 158 : 120}px 24px 80px`,
         background: `
           radial-gradient(ellipse 120% 55% at 50% -5%, rgba(5,18,48,0.95) 0%, transparent 65%),
           radial-gradient(ellipse 70% 50% at 88% 100%, rgba(160,90,10,0.55) 0%, transparent 55%),
@@ -317,8 +342,15 @@ export default function LandingPage() {
                       </div>
                     )}
                     <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,11,15,0.8) 0%, transparent 50%)" }} />
-                    <div style={{ position: "absolute", top: 14, left: 14, background: "rgba(8,11,15,0.75)", backdropFilter: "blur(8px)", border: `1px solid ${C.borderGold}`, borderRadius: 20, padding: "4px 12px", fontSize: 10, color: C.gold, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase" }}>
-                      {assetIcon[prop.asset_type]} {prop.asset_type}
+                    <div style={{ position: "absolute", top: 14, left: 14, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <div style={{ background: "rgba(8,11,15,0.75)", backdropFilter: "blur(8px)", border: `1px solid ${C.borderGold}`, borderRadius: 20, padding: "4px 12px", fontSize: 10, color: C.gold, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase" }}>
+                        {assetIcon[prop.asset_type]} {prop.asset_type}
+                      </div>
+                      {prop.is_public === 0 && (
+                        <div style={{ background: "rgba(200,169,110,0.15)", backdropFilter: "blur(8px)", border: `1px solid rgba(200,169,110,0.4)`, borderRadius: 20, padding: "4px 12px", fontSize: 10, color: C.goldLight, fontWeight: 700, letterSpacing: "1px" }}>
+                          🔒 Esclusivo
+                        </div>
+                      )}
                     </div>
                     {minPrice < Infinity && (
                       <div style={{ position: "absolute", bottom: 14, right: 14, textAlign: "right" }}>
