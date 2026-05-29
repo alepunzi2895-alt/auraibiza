@@ -40,6 +40,7 @@ export async function initDatabase() {
       `CREATE TABLE IF NOT EXISTS payments (id TEXT PRIMARY KEY, booking_id TEXT NOT NULL, type TEXT NOT NULL, amount REAL NOT NULL, payment_date TEXT NOT NULL, method TEXT NOT NULL, receiver TEXT NOT NULL, created_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS user_payment_methods (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS commission_rules (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, rate REAL NOT NULL, mode TEXT NOT NULL DEFAULT 'percentage', created_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS booking_requests (id TEXT PRIMARY KEY, property_id TEXT, room_id TEXT, client_name TEXT NOT NULL, client_email TEXT, client_phone TEXT, check_in TEXT, check_out TEXT, guests INTEGER DEFAULT 1, message TEXT, status TEXT DEFAULT 'new', created_at INTEGER NOT NULL)`,
     ], "write");
 
     // Migrations for existing tables
@@ -638,5 +639,51 @@ export async function registerUser(
     });
     revalidatePath("/");
     return { success: true, id };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+// --- PUBLIC LISTING (no auth required) ---
+export async function getPublicListings() {
+  try {
+    await initDatabase();
+    const properties = await db.execute("SELECT id, name, location, description, image, asset_type FROM properties ORDER BY name ASC");
+    const rooms = await db.execute("SELECT id, property_id, name, capacity, image, description FROM rooms ORDER BY name ASC");
+    const pricing = await db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id");
+    return {
+      properties: properties.rows,
+      rooms: rooms.rows,
+      pricing: pricing.rows,
+    };
+  } catch (error) {
+    return { properties: [], rooms: [], pricing: [], error: String(error) };
+  }
+}
+
+export async function createBookingRequest(data: {
+  propertyId?: string; roomId?: string;
+  clientName: string; clientEmail?: string; clientPhone?: string;
+  checkIn?: string; checkOut?: string; guests?: number; message?: string;
+}) {
+  try {
+    await db.execute({
+      sql: "INSERT INTO booking_requests (id, property_id, room_id, client_name, client_email, client_phone, check_in, check_out, guests, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)",
+      args: [uid(), data.propertyId || null, data.roomId || null, data.clientName, data.clientEmail || null, data.clientPhone || null, data.checkIn || null, data.checkOut || null, data.guests || 1, data.message || null, Date.now()],
+    });
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function getBookingRequests() {
+  try {
+    const res = await db.execute("SELECT br.*, p.name as property_name, r.name as room_name FROM booking_requests br LEFT JOIN properties p ON br.property_id = p.id LEFT JOIN rooms r ON br.room_id = r.id ORDER BY br.created_at DESC");
+    return res.rows;
+  } catch (error) { return []; }
+}
+
+export async function updateBookingRequestStatus(id: string, status: string) {
+  try {
+    await db.execute({ sql: "UPDATE booking_requests SET status = ? WHERE id = ?", args: [status, id] });
+    revalidatePath("/platform");
+    return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
 }
