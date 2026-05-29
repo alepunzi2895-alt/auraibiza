@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LuXy Experience — Concierge Management",
+  title: "Aura Ibiza — Concierge Management",
   description: "Booking & Property Management System",
   icons: { icon: "/logo.png" },
 };

@@ -18,7 +18,7 @@ import {
 } from "./actions";
 
 // ============================================================
-// LUXY EXPERIENCE — Concierge Booking & Property Management (Build: 2026-04-10_2058)
+// AURA IBIZA — Concierge Booking & Property Management
 // ============================================================
 
 const LOGO = "/logo.png";
@@ -150,9 +150,9 @@ interface Range { start: string | null; end: string | null; }
 function LogoFull({ size = 38, isMobile = false }: { size?: number, isMobile?: boolean }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12 }}>
-      <img src={LOGO} alt="LuXy" style={{ height: isMobile ? size * 0.8 : size, width: isMobile ? size * 0.8 : size, borderRadius: "50%", objectFit: "cover" }} />
+      <img src={LOGO} alt="Aura Ibiza" style={{ height: isMobile ? size * 0.8 : size, width: isMobile ? size * 0.8 : size, borderRadius: "50%", objectFit: "cover" }} />
       <div>
-        <div style={{ fontFamily: FONT, fontSize: (isMobile ? size * 0.35 : size * 0.45), fontWeight: 300, color: C.gold, letterSpacing: "3px", textTransform: "uppercase", lineHeight: 1 }}>LuXy</div>
+        <div style={{ fontFamily: FONT, fontSize: (isMobile ? size * 0.35 : size * 0.45), fontWeight: 300, color: C.gold, letterSpacing: "3px", textTransform: "uppercase", lineHeight: 1 }}>Aura Ibiza</div>
         {!isMobile && <div style={{ fontSize: size * 0.2, color: C.textMuted, letterSpacing: "2px", textTransform: "uppercase", marginTop: 2 }}>Experience</div>}
       </div>
     </div>
@@ -407,10 +407,10 @@ function PdfPreview({ data, onClose }: { data: { booking: Booking; room: Room | 
           padding: "36px"
         }}>
           <div style={{ background: "#0B0E11", margin: "-36px -36px 36px", padding: "36px", display: "flex", alignItems: "center", gap: 16 }}>
-            <img src={LOGO} alt="LuXy" style={{ height: 56, width: 56, borderRadius: "50%", objectFit: "cover" }} />
+            <img src={LOGO} alt="Aura Ibiza" style={{ height: 56, width: 56, borderRadius: "50%", objectFit: "cover" }} />
             <div>
-              <div style={{ fontFamily: FONT, fontSize: 24, fontWeight: 300, color: "#C8A96E", letterSpacing: "4px", textTransform: "uppercase" }}>LuXy</div>
-              <div style={{ fontSize: 10, color: "#8A8678", letterSpacing: "3px", textTransform: "uppercase" }}>Experience · Preventivo</div>
+              <div style={{ fontFamily: FONT, fontSize: 24, fontWeight: 300, color: "#C8A96E", letterSpacing: "4px", textTransform: "uppercase" }}>Aura Ibiza</div>
+              <div style={{ fontSize: 10, color: "#8A8678", letterSpacing: "3px", textTransform: "uppercase" }}>Concierge · Preventivo</div>
             </div>
           </div>
           
@@ -453,7 +453,7 @@ function PdfPreview({ data, onClose }: { data: { booking: Booking; room: Room | 
 
           <div style={{ position: "absolute", bottom: 40, left: 36, right: 36, textAlign: "center", borderTop: "1px solid #EEE", paddingTop: 20 }}>
             <img src={LOGO} alt="" style={{ height: 32, width: 32, borderRadius: "50%", opacity: 0.5, marginBottom: 8 }} />
-            <div style={{ fontSize: 9, color: "#AAA", letterSpacing: "3px", textTransform: "uppercase" }}>Luxy Experience · Personalized Quote</div>
+            <div style={{ fontSize: 9, color: "#AAA", letterSpacing: "3px", textTransform: "uppercase" }}>Aura Ibiza · Personalized Quote</div>
           </div>
         </div>
 
@@ -507,7 +507,7 @@ function PdfPreview({ data, onClose }: { data: { booking: Booking; room: Room | 
 
               {/* FOOTER - FLOW POSITIONED */}
               <div style={{ marginTop: "auto", textAlign: "center", borderTop: "1px solid #EEE", paddingTop: 20 }}>
-                <div style={{ fontSize: 9, color: "#AAA", letterSpacing: "3px", textTransform: "uppercase" }}>LuXy Experience · Dream Destinations</div>
+                <div style={{ fontSize: 9, color: "#AAA", letterSpacing: "3px", textTransform: "uppercase" }}>Aura Ibiza · Dream Destinations</div>
               </div>
             </div>
           </div>
@@ -1692,7 +1692,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
             <div id="new-prop-form" style={{ ...card, borderStyle: "dashed", background: "rgba(255,255,255,0.02)" }}>
               <h3 style={h3Style}>+ Nuova Proprietà</h3>
               <div style={grid(2)}>
-                <div><label style={label}>Nome struttura</label><input style={input} value={newPropName} onChange={e => setNewPropName(e.target.value)} placeholder="es. Villa LuXy" /></div>
+                <div><label style={label}>Nome struttura</label><input style={input} value={newPropName} onChange={e => setNewPropName(e.target.value)} placeholder="es. Villa Aura" /></div>
                 <div><label style={label}>Località / Indirizzo</label><input style={input} value={newPropLoc} onChange={e => setNewPropLoc(e.target.value)} placeholder="Città, Zona" /></div>
               </div>
               <div style={{ marginTop: 12 }}>
@@ -3027,7 +3027,7 @@ export default function Home() {
   if (loading || !dbData) {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, color: C.gold, display: "flex", justifyContent: "center", alignItems: "center", fontFamily: FONT }}>
-        Caricamento LuXy...
+        Caricamento Aura Ibiza...
       </div>
     );
   }
@@ -3060,7 +3060,7 @@ export default function Home() {
           <div style={{ marginBottom: 36, display: "flex", justifyContent: "center" }}>
             <img 
               src={LOGO} 
-              alt="LuXy Experience" 
+              alt="Aura Ibiza"
               onClick={handleLogoTap}
               style={{ height: 100, width: 100, borderRadius: "50%", objectFit: "cover", boxShadow: "0 8px 40px rgba(200,169,110,0.25)", cursor: "pointer", userSelect: "none" }} 
             />
@@ -3173,7 +3173,7 @@ function HelperBot({ role }: { role: UserRole }) {
 
   useEffect(() => {
     if (open && messages.length === 0) {
-      setMessages([{ role: "bot", text: `Buongiorno! Sono la tua LuXy Guide. Come posso aiutarti oggi? Puoi scegliere una domanda qui sotto o scrivere liberamente.` }]);
+      setMessages([{ role: "bot", text: `Buongiorno! Sono la tua Aura Guide. Come posso aiutarti oggi? Puoi scegliere una domanda qui sotto o scrivere liberamente.` }]);
     }
   }, [open, messages, role]);
 
@@ -3205,7 +3205,7 @@ function HelperBot({ role }: { role: UserRole }) {
         }}>
           <div style={{ background: "rgba(200,169,110,0.1)", padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10 }}>
              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#4CAF50" }}></div>
-             <strong style={{ color: C.gold, fontSize: 14, letterSpacing: 1 }}>LUXY GUIDE</strong>
+             <strong style={{ color: C.gold, fontSize: 14, letterSpacing: 1 }}>AURA GUIDE</strong>
           </div>
 
           <div style={{ flex: 1, padding: 20, overflowY: "auto", display: "flex", flexDirection: "column", gap: 15 }}>
