@@ -3048,6 +3048,17 @@ export default function Home() {
   const [regServices, setRegServices] = useState<string[]>([]);
   const [regStep, setRegStep] = useState<1 | 2>(1);
 
+  // Apri direttamente il form di registrazione se arriva da ?register=1
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("register") === "1") {
+        setIsRegister(true);
+        setRegStep(1);
+      }
+    }
+  }, []);
+
   const fetchAll = async (silent = false) => {
     if (!dbData && !silent) setLoading(true);
     try {

@@ -147,7 +147,6 @@ export default function LandingPage() {
           <a href="#services" style={{ color: C.textMuted, textDecoration: "none", fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", padding: "6px 12px" }} className="hide-mobile">Servizi</a>
           <a href="#how" style={{ color: C.textMuted, textDecoration: "none", fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", padding: "6px 12px" }} className="hide-mobile">Come funziona</a>
           <a href="#collaborate" style={{ color: C.textMuted, textDecoration: "none", fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", padding: "6px 12px" }} className="hide-mobile">Collabora</a>
-          <a href="/platform" style={{ ...btn("outline"), textDecoration: "none", display: "inline-block", padding: "8px 20px" }}>Accedi</a>
         </nav>
       </header>
 
@@ -189,11 +188,6 @@ export default function LandingPage() {
           <a href="#collaborate" style={{ ...btn("outline"), textDecoration: "none", padding: "14px 36px", fontSize: 13 }}>Collabora con Noi</a>
         </div>
 
-        {/* scroll indicator */}
-        <div style={{ position: "absolute", bottom: 36, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, opacity: 0.4 }}>
-          <div style={{ fontSize: 10, letterSpacing: "3px", textTransform: "uppercase", color: C.textDim }}>Scorri</div>
-          <div style={{ width: 1, height: 40, background: `linear-gradient(to bottom, ${C.gold}, transparent)` }} />
-        </div>
       </section>
 
       {/* ── SERVICES ───────────────────────────────────────────────────────── */}
@@ -369,8 +363,8 @@ export default function LandingPage() {
                   </div>
                 ))}
               </div>
-              <a href="/platform" style={{ ...btn("gold"), textDecoration: "none", display: "inline-block", padding: "14px 40px", fontSize: 13 }}>
-                Accedi alla Piattaforma →
+              <a href="/platform?register=1" style={{ ...btn("gold"), textDecoration: "none", display: "inline-block", padding: "14px 40px", fontSize: 13 }}>
+                Registrati ora →
               </a>
             </div>
 
