@@ -69,6 +69,7 @@ export async function initDatabase() {
       "ALTER TABLE users ADD COLUMN services TEXT",
       "ALTER TABLE properties ADD COLUMN is_public INTEGER DEFAULT 1",
       "ALTER TABLE properties ADD COLUMN manages_availability INTEGER DEFAULT 0",
+      "ALTER TABLE users ADD COLUMN avatar TEXT",
       "ALTER TABLE booking_requests ADD COLUMN referral_code TEXT",
       "ALTER TABLE booking_requests ADD COLUMN referral_user_id TEXT",
       "ALTER TABLE booking_requests ADD COLUMN platform_fee_rate REAL DEFAULT 0",
@@ -743,7 +744,7 @@ export async function registerUser(
   nickname: string,
   password: string,
   role: "owner" | "concierge" | "agent" = "concierge",
-  profile?: { firstName?: string; lastName?: string; email?: string; phone?: string; services?: string[] }
+  profile?: { firstName?: string; lastName?: string; email?: string; phone?: string; services?: string[]; avatar?: string }
 ) {
   try {
     const nick = nickname.toLowerCase().trim();
@@ -753,12 +754,13 @@ export async function registerUser(
     if (existing.rows.length > 0) return { success: false, error: "Nickname già in uso." };
     const id = `u${uid()}`;
     await db.execute({
-      sql: "INSERT INTO users (id, nickname, role, password, status, first_name, last_name, email, phone, services, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      sql: "INSERT INTO users (id, nickname, role, password, status, first_name, last_name, email, phone, services, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       args: [
         id, nick, role, hashPassword(password), 'pending',
         profile?.firstName || null, profile?.lastName || null,
         profile?.email || null, profile?.phone || null,
         profile?.services?.length ? JSON.stringify(profile.services) : null,
+        profile?.avatar || null,
         Date.now()
       ],
     });

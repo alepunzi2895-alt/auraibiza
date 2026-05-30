@@ -3147,11 +3147,19 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {pendingUsers.map((u: any) => (
-                  <div key={u.id} style={{ ...card, display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: `4px solid ${C.warning}` }}>
-                    <div>
-                      <div style={{ fontWeight: 700, color: C.gold, fontSize: 15 }}>{u.nickname}</div>
-                      <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>Ruolo richiesto: <span style={{ color: C.text }}>{roleIcon(u.role)} {u.role}</span></div>
-                      <div style={{ fontSize: 10, color: C.textDim }}>Registrato il {new Date(u.created_at).toLocaleDateString("it-IT")}</div>
+                  <div key={u.id} style={{ ...card, display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: `4px solid ${C.warning}`, gap: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14, flex: 1 }}>
+                      <div style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", border: `2px solid ${C.warning}55`, flexShrink: 0, background: C.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>
+                        {u.avatar ? <img src={u.avatar} alt={u.nickname} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : roleIcon(u.role)}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 700, color: C.gold, fontSize: 15 }}>{u.nickname}</div>
+                        {(u.first_name || u.last_name) && <div style={{ fontSize: 12, color: C.text }}>{[u.first_name, u.last_name].filter(Boolean).join(" ")}</div>}
+                        <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>Ruolo: <span style={{ color: C.text }}>{roleIcon(u.role)} {u.role}</span></div>
+                        {u.email && <div style={{ fontSize: 11, color: C.textDim }}>{u.email}</div>}
+                        {u.phone && <div style={{ fontSize: 11, color: C.textDim }}>{u.phone}</div>}
+                        <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>Registrato il {new Date(u.created_at).toLocaleDateString("it-IT")}</div>
+                      </div>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <select style={{ ...sel, width: 130, padding: "4px 8px", fontSize: 11 }} defaultValue={u.role} onChange={e => updateUserRole(u.id, e.target.value)}>
@@ -3185,8 +3193,8 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
                       {/* Colonna sinistra: identità */}
                       <div style={{ flex: 1, minWidth: 220 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                          <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.surfaceAlt, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
-                            {roleIcon(u.role)}
+                          <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.surfaceAlt, border: `1px solid ${u.avatar ? C.borderGold : C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, overflow: "hidden" }}>
+                            {u.avatar ? <img src={u.avatar} alt={u.nickname} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : roleIcon(u.role)}
                           </div>
                           <div>
                             <div style={{ fontFamily: FONT, fontSize: 20, color: C.goldLight, lineHeight: 1 }}>{u.nickname}</div>
@@ -3566,6 +3574,7 @@ export default function Home() {
   const [regEmail, setRegEmail] = useState("");
   const [regPhone, setRegPhone] = useState("");
   const [regServices, setRegServices] = useState<string[]>([]);
+  const [regAvatar, setRegAvatar] = useState<string | null>(null);
   const [regStep, setRegStep] = useState<1 | 2>(1);
 
   // Apri direttamente il form di registrazione se arriva da ?register=1
@@ -3617,6 +3626,7 @@ export default function Home() {
     const res = await registerUser(nickname, password, regRole, {
       firstName: regFirstName, lastName: regLastName,
       email: regEmail, phone: regPhone, services: regServices,
+      avatar: regAvatar || undefined,
     });
     if ((res as any).error) {
       alert((res as any).error);
@@ -3625,7 +3635,7 @@ export default function Home() {
     }
     alert("Registrazione inviata! Il tuo account è in attesa di approvazione dall'admin.");
     setIsRegister(false);
-    setPassword(""); setRegFirstName(""); setRegLastName(""); setRegEmail(""); setRegPhone(""); setRegServices([]);
+    setPassword(""); setRegFirstName(""); setRegLastName(""); setRegEmail(""); setRegPhone(""); setRegServices([]); setRegAvatar(null);
     setRegStep(1);
     setLoading(false);
   };
@@ -3782,6 +3792,54 @@ export default function Home() {
               </div>
 
               <form onSubmit={e => { e.preventDefault(); handleRegister(); }}>
+                {/* Avatar */}
+                <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 20 }}>
+                  <label style={{ cursor: "pointer", flexShrink: 0 }}>
+                    <div style={{
+                      width: 88, height: 88, borderRadius: "50%", overflow: "hidden",
+                      border: `2px dashed ${regAvatar ? C.gold : C.border}`,
+                      background: C.surfaceAlt,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      transition: "border-color 0.2s", position: "relative",
+                    }}>
+                      {regAvatar ? (
+                        <img src={regAvatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 24, marginBottom: 4 }}>📸</div>
+                          <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "0.5px" }}>Foto</div>
+                        </div>
+                      )}
+                    </div>
+                    <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => {
+                        const base64 = ev.target?.result as string;
+                        const img = new Image();
+                        img.src = base64;
+                        img.onload = () => {
+                          const canvas = document.createElement("canvas");
+                          const size = Math.min(img.width, img.height, 400);
+                          canvas.width = size; canvas.height = size;
+                          const ctx = canvas.getContext("2d")!;
+                          const ox = (img.width - size) / 2;
+                          const oy = (img.height - size) / 2;
+                          ctx.drawImage(img, ox, oy, size, size, 0, 0, size, size);
+                          setRegAvatar(canvas.toDataURL("image/jpeg", 0.75));
+                        };
+                      };
+                      reader.readAsDataURL(file);
+                    }} />
+                  </label>
+                  <div>
+                    <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>Foto profilo</div>
+                    <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.7 }}>Clicca sul cerchio per caricare la tua foto. Verrà ritagliata in formato quadrato.</div>
+                    {regAvatar && <button type="button" onClick={() => setRegAvatar(null)} style={{ marginTop: 8, background: "none", border: "none", color: C.danger, fontSize: 11, cursor: "pointer", padding: 0 }}>✕ Rimuovi foto</button>}
+                  </div>
+                </div>
+
                 {/* Credentials */}
                 <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
                   <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>Credenziali di accesso</div>
@@ -3854,12 +3912,20 @@ export default function Home() {
           boxShadow: "0 1px 20px rgba(0,0,0,0.4)",
         }}>
           <LogoFull size={38} isMobile={isMobile} />
-          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 16 }}>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: isMobile ? 11 : 12, color: C.gold, fontWeight: 600 }}>
-                {({ admin: "👑", owner: "🏠", concierge: "🤵", agent: "🌐" } as any)[user.role] || "👤"} {user.nickname}
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {/* Avatar o emoji ruolo */}
+              {(user as any).avatar ? (
+                <img src={(user as any).avatar} alt={user.nickname} style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", border: `1px solid ${C.borderGold}`, flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 34, height: 34, borderRadius: "50%", background: C.surfaceAlt, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
+                  {({ admin: "👑", owner: "🏠", concierge: "🤵", agent: "🌐" } as any)[user.role] || "👤"}
+                </div>
+              )}
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontSize: isMobile ? 11 : 12, color: C.gold, fontWeight: 600, lineHeight: 1 }}>{user.nickname}</div>
+                {!isMobile && <div style={{ fontSize: 9, color: C.textDim, textTransform: "uppercase", letterSpacing: "1.5px", marginTop: 2 }}>{user.role}</div>}
               </div>
-              {!isMobile && <div style={{ fontSize: 9, color: C.textDim, textTransform: "uppercase", letterSpacing: "1.5px" }}>{user.role}</div>}
             </div>
             <button style={{ ...btn(), padding: isMobile ? "6px 12px" : "8px 18px", fontSize: 11 }} onClick={() => setUser(null)}>Esci</button>
           </div>
