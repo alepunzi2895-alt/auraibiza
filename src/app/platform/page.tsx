@@ -3169,29 +3169,103 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
 
         {tab === "users" && (
           <div>
-            <h2 style={h2Style}>Gestione Utenti</h2>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                <thead><tr>{["Nickname", "Ruolo", "Status", "Gestito da", "Registrato", "Azioni"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
-                <tbody>{allUsers.filter((u: any) => u.id !== user.id).map((u: any) => (
-                  <tr key={u.id}>
-                    <td style={{ ...td, fontWeight: 600 }}>{roleIcon(u.role)} {u.nickname}</td>
-                    <td style={td}>
-                      <select style={{ ...sel, width: 120, padding: "3px 6px", fontSize: 11 }} value={u.role} onChange={e => handleRoleChange(u.id, e.target.value)}>
-                        {["owner", "concierge", "agent", "admin"].map(r => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                    </td>
-                    <td style={td}>
-                      <span style={badge(u.status === 'active' ? C.success : C.warning)}>{u.status || 'active'}</span>
-                    </td>
-                    <td style={{ ...td, color: C.textDim, fontSize: 10 }}>{u.managed_by || "—"}</td>
-                    <td style={{ ...td, fontSize: 10, color: C.textDim }}>{new Date(u.created_at).toLocaleDateString("it-IT")}</td>
-                    <td style={td}>
-                      <button style={{ ...btn(), fontSize: 10, padding: "3px 8px", color: C.danger, borderColor: C.danger + "44" }} onClick={() => handleDeleteUser(u.id, u.nickname)}>Elimina</button>
-                    </td>
-                  </tr>
-                ))}</tbody>
-              </table>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+              <h2 style={{ ...h2Style, marginBottom: 0 }}>Gestione Utenti</h2>
+              <div style={{ fontSize: 12, color: C.textDim }}>{allUsers.length} utenti totali</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {allUsers.filter((u: any) => u.id !== user.id).map((u: any) => {
+                const services: string[] = (() => { try { return u.services ? JSON.parse(u.services) : []; } catch { return []; } })();
+                const agentCollabs = (data.agentConciergeCollabs || []).filter((c: any) => c.agent_id === u.id || c.concierge_id === u.id);
+                const userProps = (data.properties || []).filter((p: any) => p.owner_id === u.id);
+                return (
+                  <div key={u.id} style={{ ...card, borderLeft: `4px solid ${u.status === 'active' ? (u.role === 'admin' ? C.gold : u.role === 'owner' ? C.success : u.role === 'concierge' ? C.info : C.textMuted) : C.warning}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
+
+                      {/* Colonna sinistra: identità */}
+                      <div style={{ flex: 1, minWidth: 220 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.surfaceAlt, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
+                            {roleIcon(u.role)}
+                          </div>
+                          <div>
+                            <div style={{ fontFamily: FONT, fontSize: 20, color: C.goldLight, lineHeight: 1 }}>{u.nickname}</div>
+                            {(u.first_name || u.last_name) && (
+                              <div style={{ fontSize: 13, color: C.text, marginTop: 3 }}>{[u.first_name, u.last_name].filter(Boolean).join(" ")}</div>
+                            )}
+                          </div>
+                          <span style={badge(u.status === 'active' ? C.success : C.warning)}>{u.status || 'active'}</span>
+                        </div>
+
+                        {/* Contatti */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
+                          {u.email && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ color: C.textDim, width: 14 }}>✉</span>
+                              <a href={`mailto:${u.email}`} style={{ color: C.gold, textDecoration: "none" }}>{u.email}</a>
+                            </div>
+                          )}
+                          {u.phone && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ color: C.textDim, width: 14 }}>📞</span>
+                              <a href={`tel:${u.phone}`} style={{ color: C.gold, textDecoration: "none" }}>{u.phone}</a>
+                            </div>
+                          )}
+                          {!u.email && !u.phone && (
+                            <div style={{ fontSize: 11, color: C.textDim, fontStyle: "italic" }}>Nessun contatto registrato</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Colonna centrale: dettagli ruolo + servizi */}
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 10 }}>Profilo</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11, marginBottom: 12 }}>
+                          <div><span style={{ color: C.textDim }}>Ruolo</span><br /><strong style={{ color: C.text }}>{roleIcon(u.role)} {u.role}</strong></div>
+                          <div><span style={{ color: C.textDim }}>Registrato</span><br /><strong style={{ color: C.text }}>{new Date(u.created_at).toLocaleDateString("it-IT")}</strong></div>
+                          {u.managed_by && <div><span style={{ color: C.textDim }}>Gestito da</span><br /><strong style={{ color: C.text }}>{u.managed_by}</strong></div>}
+                          {userProps.length > 0 && <div><span style={{ color: C.textDim }}>Proprietà</span><br /><strong style={{ color: C.success }}>{userProps.length}</strong></div>}
+                        </div>
+                        {services.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>Servizi offerti</div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                              {services.map((s: string) => (
+                                <span key={s} style={{ padding: "3px 10px", borderRadius: 20, background: C.surfaceAlt, border: `1px solid ${C.border}`, fontSize: 10, color: C.textMuted }}>{s}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {agentCollabs.length > 0 && (
+                          <div style={{ marginTop: 10 }}>
+                            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>Collaborazioni agente</div>
+                            {agentCollabs.map((c: any) => (
+                              <div key={c.id} style={{ fontSize: 11, color: C.textMuted }}>
+                                {c.concierge_id === u.id ? `→ Agente: ${c.agent_nickname}` : `← Concierge: ${c.concierge_nickname}`}
+                                <span style={{ color: C.gold, marginLeft: 6 }}>{c.commission_rate}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Colonna destra: azioni */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 150 }}>
+                        <div>
+                          <label style={{ ...label, marginBottom: 4 }}>Cambia ruolo</label>
+                          <select style={{ ...sel, padding: "6px 10px", fontSize: 11 }} value={u.role} onChange={e => handleRoleChange(u.id, e.target.value)}>
+                            {["owner", "concierge", "agent", "admin"].map(r => <option key={r} value={r}>{r}</option>)}
+                          </select>
+                        </div>
+                        {u.email && (
+                          <a href={`mailto:${u.email}`} style={{ ...btn(), textDecoration: "none", textAlign: "center", padding: "7px 12px", fontSize: 10 }}>✉ Scrivi email</a>
+                        )}
+                        <button style={{ ...btn(), fontSize: 10, padding: "7px 12px", color: C.danger, borderColor: C.danger + "44" }} onClick={() => handleDeleteUser(u.id, u.nickname)}>🗑 Elimina utente</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
