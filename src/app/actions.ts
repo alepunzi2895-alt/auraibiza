@@ -68,6 +68,7 @@ export async function initDatabase() {
       "ALTER TABLE users ADD COLUMN phone TEXT",
       "ALTER TABLE users ADD COLUMN services TEXT",
       "ALTER TABLE properties ADD COLUMN is_public INTEGER DEFAULT 1",
+      "ALTER TABLE properties ADD COLUMN manages_availability INTEGER DEFAULT 0",
       "ALTER TABLE booking_requests ADD COLUMN referral_code TEXT",
       "ALTER TABLE booking_requests ADD COLUMN referral_user_id TEXT",
       "ALTER TABLE booking_requests ADD COLUMN platform_fee_rate REAL DEFAULT 0",
@@ -777,8 +778,8 @@ export async function getPublicListings(referralCode?: string) {
       showAll = refUser.rows.length > 0;
     }
     const propertiesSQL = showAll
-      ? "SELECT id, name, location, description, image, asset_type, is_public FROM properties ORDER BY name ASC"
-      : "SELECT id, name, location, description, image, asset_type, is_public FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
+      ? "SELECT id, name, location, description, image, asset_type, is_public, manages_availability FROM properties ORDER BY name ASC"
+      : "SELECT id, name, location, description, image, asset_type, is_public, manages_availability FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
     const properties = await db.execute(propertiesSQL);
     const rooms = await db.execute("SELECT id, property_id, name, capacity, image, description FROM rooms ORDER BY name ASC");
     const pricing = await db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id");
@@ -800,6 +801,24 @@ export async function togglePropertyPublic(propertyId: string, isPublic: boolean
     revalidatePath("/platform");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function togglePropertyManagesAvailability(propertyId: string, manages: boolean) {
+  try {
+    await db.execute({ sql: "UPDATE properties SET manages_availability = ? WHERE id = ?", args: [manages ? 1 : 0, propertyId] });
+    revalidatePath("/");
+    revalidatePath("/platform");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function getPublicRoomAvailability(roomId: string, month: string) {
+  try {
+    const avail = await db.execute({ sql: "SELECT date, status FROM availability WHERE room_id = ? AND date LIKE ?", args: [roomId, `${month}%`] });
+    // Fetch confirmed bookings to mark as occupied
+    const bookings = await db.execute({ sql: "SELECT start_date, end_date FROM bookings WHERE room_id = ? AND status IN ('confirmed_owner','evaso','payment_submitted') AND start_date LIKE ? OR end_date LIKE ?", args: [roomId, `${month}%`, `${month}%`] });
+    return { availability: avail.rows, bookings: bookings.rows };
+  } catch (error) { return { availability: [], bookings: [] }; }
 }
 
 export async function createBookingRequest(data: {

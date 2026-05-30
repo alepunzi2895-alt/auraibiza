@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, CSSProperties } from "react";
-import { getPublicListings, createBookingRequest } from "./actions";
+import { getPublicListings, createBookingRequest, getPublicRoomAvailability } from "./actions";
 
 // ─── Design tokens (standalone, no import from platform) ─────────────────────
 const C = {
@@ -58,11 +58,158 @@ const labelStyle: CSSProperties = {
   letterSpacing: "1.2px", color: C.textMuted, marginBottom: 6, display: "block",
 };
 
+const WA_NUMBER = "34645265430";
+const MONTH_NAMES = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+
+// ─── Public Calendar ─────────────────────────────────────────────────────────
+function PublicCalendar({ roomId, onRangeSelect, selectedRange }: {
+  roomId: string;
+  onRangeSelect: (start: string | null, end: string | null) => void;
+  selectedRange: { start: string | null; end: string | null };
+}) {
+  const today = new Date();
+  const [ym, setYm] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
+  const [avail, setAvail] = useState<Record<string, "available" | "blocked" | "booked">>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    getPublicRoomAvailability(roomId, ym).then(data => {
+      const map: Record<string, "available" | "blocked" | "booked"> = {};
+      (data.availability || []).forEach((a: any) => { map[a.date] = a.status; });
+      (data.bookings || []).forEach((b: any) => {
+        const s = new Date(b.start_date + "T00:00:00");
+        const e = new Date(b.end_date + "T00:00:00");
+        for (let d = new Date(s); d < e; d.setDate(d.getDate() + 1)) {
+          map[d.toLocaleDateString("en-CA")] = "booked";
+        }
+      });
+      setAvail(map);
+      setLoading(false);
+    });
+  }, [roomId, ym]);
+
+  const [year, month] = ym.split("-").map(Number);
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  const offset = firstDay === 0 ? 6 : firstDay - 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const todayStr = today.toLocaleDateString("en-CA");
+
+  const handleDay = (date: string) => {
+    const s = avail[date];
+    if (s === "booked" || s === "blocked") return;
+    if (date < todayStr) return;
+    if (!selectedRange.start || (selectedRange.start && selectedRange.end)) {
+      onRangeSelect(date, null);
+    } else {
+      if (date < selectedRange.start) { onRangeSelect(date, null); return; }
+      if (date === selectedRange.start) { onRangeSelect(null, null); return; }
+      // Check no blocked/booked days in range
+      let cursor = new Date(selectedRange.start + "T00:00:00");
+      cursor.setDate(cursor.getDate() + 1);
+      const end = new Date(date + "T00:00:00");
+      let hasBlocked = false;
+      while (cursor < end) {
+        const d = cursor.toLocaleDateString("en-CA");
+        if (avail[d] === "blocked" || avail[d] === "booked") { hasBlocked = true; break; }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      if (hasBlocked) { onRangeSelect(date, null); return; }
+      onRangeSelect(selectedRange.start, date);
+    }
+  };
+
+  const isInRange = (date: string) => {
+    if (!selectedRange.start || !selectedRange.end) return date === selectedRange.start;
+    return date >= selectedRange.start && date <= selectedRange.end;
+  };
+
+  const nights = selectedRange.start && selectedRange.end
+    ? Math.ceil((new Date(selectedRange.end).getTime() - new Date(selectedRange.start).getTime()) / 86400000)
+    : 0;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <button onClick={() => { const [y,m] = ym.split("-").map(Number); setYm(m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,"0")}`); }}
+          style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: "6px 12px", fontSize: 14 }}>◂</button>
+        <div style={{ fontFamily: FONT, fontSize: 18, color: C.goldLight }}>{MONTH_NAMES[month - 1]} {year}</div>
+        <button onClick={() => { const [y,m] = ym.split("-").map(Number); setYm(m===12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,"0")}`); }}
+          style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: "6px 12px", fontSize: 14 }}>▸</button>
+      </div>
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 24, color: C.textDim, fontSize: 12 }}>Caricamento...</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
+          {["Lu","Ma","Me","Gi","Ve","Sa","Do"].map(d => (
+            <div key={d} style={{ textAlign: "center", fontSize: 10, color: C.textDim, padding: "4px 0", fontWeight: 600 }}>{d}</div>
+          ))}
+          {Array.from({ length: offset }).map((_, i) => <div key={`e${i}`} />)}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const day = i + 1;
+            const date = `${ym}-${String(day).padStart(2, "0")}`;
+            const status = avail[date];
+            const isPast = date < todayStr;
+            const isBooked = status === "booked";
+            const isBlocked = status === "blocked";
+            const isAvail = !isPast && !isBooked && !isBlocked;
+            const inRange = isInRange(date);
+            const isStart = date === selectedRange.start;
+            const isEnd = date === selectedRange.end;
+
+            let bg = "transparent";
+            if (isPast) bg = "rgba(255,255,255,0.02)";
+            else if (isBooked) bg = "rgba(180,68,68,0.25)";
+            else if (isBlocked) bg = "rgba(100,80,40,0.2)";
+            else if (isStart || isEnd) bg = C.gold;
+            else if (inRange) bg = "rgba(200,169,110,0.2)";
+            else if (isAvail && status === "available") bg = "rgba(61,158,106,0.15)";
+
+            const textColor = isStart || isEnd ? C.bg : isPast || isBooked || isBlocked ? C.textDim : inRange ? C.gold : C.text;
+            const cursor = isAvail || inRange ? "pointer" : "default";
+
+            return (
+              <div key={day} onClick={() => handleDay(date)} style={{
+                height: 40, display: "flex", alignItems: "center", justifyContent: "center",
+                borderRadius: 6, background: bg, cursor,
+                border: inRange && !isStart && !isEnd ? `1px solid rgba(200,169,110,0.3)` : "1px solid transparent",
+                fontSize: 13, fontWeight: isStart || isEnd ? 700 : 400, color: textColor,
+                opacity: isPast ? 0.35 : 1, transition: "all 0.15s",
+                position: "relative",
+              }}>
+                {day}
+                {isAvail && status === "available" && !inRange && (
+                  <div style={{ position: "absolute", bottom: 4, left: "50%", transform: "translateX(-50%)", width: 3, height: 3, borderRadius: "50%", background: C.success }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 16, marginTop: 14, fontSize: 10, color: C.textDim, flexWrap: "wrap", justifyContent: "center" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(61,158,106,0.3)", display: "inline-block" }} />Disponibile</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(180,68,68,0.3)", display: "inline-block" }} />Occupato</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: C.gold, display: "inline-block" }} />Selezionato</span>
+      </div>
+      {nights > 0 && (
+        <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: C.gold, fontFamily: FONT }}>
+          {nights} {nights === 1 ? "notte" : "notti"} selezionate
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function LandingPage() {
   const [listings, setListings] = useState<any>({ properties: [], rooms: [], pricing: [], referralValid: false });
   const [activeCat, setActiveCat] = useState("all");
+  // modal prenotazione form (vecchio)
   const [modal, setModal] = useState<{ property: any; room: any } | null>(null);
+  // modal dettaglio asset (nuovo)
+  const [detailModal, setDetailModal] = useState<any>(null); // property
+  const [detailRoom, setDetailRoom] = useState<any>(null);   // room selezionata nel modal
+  const [detailRange, setDetailRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [menuOpen, setMenuOpen] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralReady, setReferralReady] = useState(false);
@@ -122,10 +269,10 @@ export default function LandingPage() {
     else { setFormErr("Errore nell'invio. Riprova."); }
   };
 
-  const openModal = (property: any, room: any) => {
+  const openModal = (property: any, room: any, checkIn?: string, checkOut?: string) => {
     setModal({ property, room });
     setSent(false); setFormErr("");
-    setForm({ name:"", email:"", phone:"", checkIn:"", checkOut:"", guests:"1", message:"" });
+    setForm({ name:"", email:"", phone:"", checkIn: checkIn || "", checkOut: checkOut || "", guests:"1", message:"" });
   };
 
   return (
@@ -326,11 +473,16 @@ export default function LandingPage() {
                 return p < min ? p : min;
               }, Infinity);
 
+              const openDetail = () => {
+                setDetailModal(prop);
+                setDetailRoom(rooms[0] || null);
+                setDetailRange({ start: null, end: null });
+              };
               return (
-                <div key={prop.id} className="card-hover" style={{
+                <div key={prop.id} className="card-hover" onClick={openDetail} style={{
                   background: `linear-gradient(160deg, ${C.surface} 0%, rgba(14,18,26,0.95) 100%)`,
                   border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden",
-                  boxShadow: "0 4px 24px rgba(0,0,0,0.3)",
+                  boxShadow: "0 4px 24px rgba(0,0,0,0.3)", cursor: "pointer",
                 }}>
                   {/* Image */}
                   <div style={{ position: "relative", height: 220, background: C.surfaceAlt, overflow: "hidden" }}>
@@ -351,6 +503,11 @@ export default function LandingPage() {
                           🔒 Esclusivo
                         </div>
                       )}
+                      {prop.manages_availability ? (
+                        <div style={{ background: "rgba(61,158,106,0.2)", backdropFilter: "blur(8px)", border: "1px solid rgba(61,158,106,0.4)", borderRadius: 20, padding: "4px 12px", fontSize: 10, color: "#5DD09A", fontWeight: 600, letterSpacing: "1px" }}>
+                          📅 Disponibilità live
+                        </div>
+                      ) : null}
                     </div>
                     {minPrice < Infinity && (
                       <div style={{ position: "absolute", bottom: 14, right: 14, textAlign: "right" }}>
@@ -371,36 +528,14 @@ export default function LandingPage() {
                         {prop.description}
                       </p>
                     )}
-
-                    {/* Rooms */}
-                    {rooms.length > 0 && (
-                      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14, marginBottom: 16 }}>
-                        <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 8 }}>Unità disponibili</div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          {rooms.map((r: any) => {
-                            const pr = getPricing(r.id);
-                            return (
-                              <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div>
-                                  <span style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>{r.name}</span>
-                                  <span style={{ fontSize: 10, color: C.textDim, marginLeft: 8 }}>· {r.capacity} ospiti</span>
-                                </div>
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                  {pr && <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>€{pr.min_price}/notte</span>}
-                                  <button onClick={() => openModal(prop, r)} style={{ ...btn("gold"), padding: "5px 14px", fontSize: 10, borderRadius: 6 }}>
-                                    Richiedi
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    <button onClick={() => openModal(prop, rooms[0] || null)} style={{ ...btn("outline"), width: "100%", padding: "10px", fontSize: 11 }}>
-                      Richiedi Disponibilità
-                    </button>
+                    <div style={{ fontSize: 11, color: C.textMuted, display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <span>{rooms.length} {rooms.length === 1 ? "unità" : "unità disponibili"}</span>
+                      <span>·</span>
+                      <span>{prop.manages_availability ? "Disponibilità verificata" : "Su richiesta WhatsApp"}</span>
+                    </div>
+                    <div style={{ ...btn("gold"), textAlign: "center", padding: "10px", fontSize: 11, borderRadius: 8, marginTop: 8 }}>
+                      {prop.manages_availability ? "📅 Vedi Disponibilità" : "💬 Richiedi via WhatsApp"}
+                    </div>
                   </div>
                 </div>
               );
@@ -544,6 +679,141 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* ── DETAIL MODAL ───────────────────────────────────────────────────── */}
+      {detailModal && (() => {
+        const prop = detailModal;
+        const rooms = getRoomsForProperty(prop.id);
+        const images = parseImages(prop.image);
+        const managedAvail = !!prop.manages_availability;
+        const waText = encodeURIComponent(`Ciao! Sono interessato/a a *${prop.name}*${detailRoom ? ` — *${detailRoom.name}*` : ""}.\n\nPotreste indicarmi la disponibilità? Sto cercando queste date: `);
+        const waUrl = `https://wa.me/${WA_NUMBER}?text=${waText}`;
+
+        const nights = detailRange.start && detailRange.end
+          ? Math.ceil((new Date(detailRange.end).getTime() - new Date(detailRange.start).getTime()) / 86400000)
+          : 0;
+
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", backdropFilter: "blur(16px)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 500, padding: "24px 16px", overflowY: "auto" }}
+            onClick={() => { setDetailModal(null); setDetailRange({ start: null, end: null }); }}>
+            <div style={{
+              background: `linear-gradient(160deg, ${C.surface} 0%, rgba(10,14,22,0.99) 100%)`,
+              border: `1px solid ${C.borderGold}`, borderRadius: 20, width: "100%", maxWidth: 840,
+              boxShadow: "0 24px 80px rgba(0,0,0,0.7)", marginTop: 20,
+            }} onClick={e => e.stopPropagation()}>
+
+              {/* Cover image */}
+              {images.length > 0 && (
+                <div style={{ height: 280, borderRadius: "20px 20px 0 0", overflow: "hidden", position: "relative" }}>
+                  <img src={images[0]} alt={prop.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,14,22,0.7) 0%, transparent 60%)" }} />
+                  <button onClick={() => { setDetailModal(null); setDetailRange({ start: null, end: null }); }}
+                    style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                  {prop.is_public === 0 && <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(200,169,110,0.2)", border: "1px solid rgba(200,169,110,0.5)", borderRadius: 20, padding: "4px 14px", fontSize: 11, color: C.goldLight, fontWeight: 700 }}>🔒 Esclusivo</div>}
+                </div>
+              )}
+
+              <div style={{ padding: "28px 32px 32px" }}>
+                {/* Header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 6 }}>{assetIcon[prop.asset_type]} {prop.asset_type}</div>
+                    <h2 style={{ fontFamily: FONT, fontSize: 30, fontWeight: 300, color: C.goldLight, marginBottom: 6, letterSpacing: "1px" }}>{prop.name}</h2>
+                    <div style={{ fontSize: 13, color: C.textMuted }}>📍 {prop.location}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 10, color: C.textDim, letterSpacing: "1px", textTransform: "uppercase" }}>da</div>
+                    {(() => { const mp = rooms.reduce((min: number, r: any) => { const pr = getPricing(r.id); const p = pr?.min_price ?? Infinity; return p < min ? p : min; }, Infinity); return mp < Infinity ? <div style={{ fontFamily: FONT, fontSize: 28, color: C.gold }}>€{mp}<span style={{ fontSize: 13, color: C.textMuted }}>/notte</span></div> : null; })()}
+                  </div>
+                </div>
+
+                {prop.description && <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.8, marginBottom: 24 }}>{prop.description}</p>}
+
+                {/* Galleria miniature */}
+                {images.length > 1 && (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 24, overflowX: "auto" }}>
+                    {images.map((img, i) => (
+                      <img key={i} src={img} alt="" style={{ height: 64, width: 96, objectFit: "cover", borderRadius: 8, flexShrink: 0, border: `1px solid ${C.border}` }} />
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: "grid", gridTemplateColumns: rooms.length > 1 ? "1fr 1fr" : "1fr", gap: 20 }}>
+                  {/* Colonna sinistra: selezione unità */}
+                  <div>
+                    <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 12 }}>Unità disponibili</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {rooms.map((r: any) => {
+                        const pr = getPricing(r.id);
+                        const isSelected = detailRoom?.id === r.id;
+                        return (
+                          <div key={r.id} onClick={() => { setDetailRoom(r); setDetailRange({ start: null, end: null }); }}
+                            style={{ padding: "12px 16px", borderRadius: 10, cursor: "pointer",
+                              border: isSelected ? `1px solid ${C.borderGold}` : `1px solid ${C.border}`,
+                              background: isSelected ? C.goldGlow : "rgba(255,255,255,0.02)",
+                              transition: "all 0.2s" }}>
+                            <div style={{ fontWeight: 600, color: isSelected ? C.gold : C.text, fontSize: 13 }}>{r.name}</div>
+                            <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
+                              {r.capacity} ospiti {pr ? `· €${pr.min_price}/notte` : ""}
+                            </div>
+                            {r.description && <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{r.description}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Colonna destra: calendario o WhatsApp */}
+                  <div>
+                    {managedAvail && detailRoom ? (
+                      <div>
+                        <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 12 }}>Disponibilità</div>
+                        <PublicCalendar
+                          roomId={detailRoom.id}
+                          selectedRange={detailRange}
+                          onRangeSelect={(s, e) => setDetailRange({ start: s, end: e })}
+                        />
+                        {nights > 0 && (
+                          <button style={{ ...btn("gold"), width: "100%", marginTop: 16, padding: "14px" }}
+                            onClick={() => {
+                              openModal(prop, detailRoom, detailRange.start || undefined, detailRange.end || undefined);
+                            }}>
+                            Prenota {nights} {nights === 1 ? "notte" : "notti"} →
+                          </button>
+                        )}
+                        {!detailRange.start && (
+                          <div style={{ marginTop: 14, fontSize: 12, color: C.textDim, textAlign: "center" }}>
+                            Clicca sul giorno di check-in per selezionare le date
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingTop: 32 }}>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 40, marginBottom: 16 }}>💬</div>
+                          <div style={{ fontFamily: FONT, fontSize: 20, color: C.goldLight, marginBottom: 8 }}>Prenota via WhatsApp</div>
+                          <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.8 }}>
+                            Scrivici direttamente per verificare disponibilità e finalizzare la prenotazione. Risposta entro poche ore.
+                          </p>
+                        </div>
+                        <a href={waUrl} target="_blank" rel="noopener noreferrer"
+                          style={{ ...btn("gold"), textDecoration: "none", textAlign: "center", padding: "16px", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: 10, background: "linear-gradient(135deg, #128C7E, #25D366)" }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                          <span style={{ color: "#fff" }}>Scrivi su WhatsApp</span>
+                        </a>
+                        <a href={`mailto:info.auraibiza@gmail.com?subject=Richiesta disponibilità: ${encodeURIComponent(prop.name)}&body=${encodeURIComponent(`Ciao,\n\nSono interessato/a a ${prop.name}${detailRoom ? ` — ${detailRoom.name}` : ""}.\n\nVorrei verificare la disponibilità per le seguenti date:\n\nGrazie`)}`}
+                          style={{ ...btn("outline"), textDecoration: "none", textAlign: "center", padding: "12px", fontSize: 12, display: "block" }}>
+                          ✉ Oppure scrivi via email
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── REQUEST MODAL ──────────────────────────────────────────────────── */}
       {modal && (
