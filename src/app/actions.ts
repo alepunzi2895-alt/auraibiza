@@ -89,6 +89,11 @@ export async function initDatabase() {
       "ALTER TABLE properties ADD COLUMN pdf_document TEXT",
       "ALTER TABLE properties ADD COLUMN pdf_name TEXT",
       "ALTER TABLE properties ADD COLUMN cover_image TEXT",
+      "ALTER TABLE rooms ADD COLUMN ical_url TEXT",
+      "ALTER TABLE rooms ADD COLUMN ical_last_synced INTEGER",
+      "ALTER TABLE availability ADD COLUMN blocked_source TEXT",
+      "ALTER TABLE rooms ADD COLUMN bedrooms INTEGER",
+      "ALTER TABLE rooms ADD COLUMN bathrooms INTEGER",
     ];
     for (const sql of migrations) {
       try { await db.execute(sql); } catch (_e) {}
@@ -676,6 +681,78 @@ export async function batchUpdateAvailabilityAction(roomId: string, updates: Rec
     }
     revalidatePath("/");
     return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+// --- ICAL SYNC ---
+// Estrae le coppie DTSTART/DTEND da ogni VEVENT di un feed .ics (gestisce sia date
+// intere "VALUE=DATE:20260715" che date-time "20260715T140000Z", ne basta il prefisso YYYYMMDD).
+function parseICSEvents(icsText: string): { start: string; end: string }[] {
+  const events: { start: string; end: string }[] = [];
+  const toIsoDate = (raw: string) => {
+    const m = raw.match(/(\d{4})(\d{2})(\d{2})/);
+    if (!m) return null;
+    return `${m[1]}-${m[2]}-${m[3]}`;
+  };
+  const veventBlocks = icsText.split("BEGIN:VEVENT").slice(1);
+  for (const block of veventBlocks) {
+    const dtStartMatch = block.match(/DTSTART[^:\r\n]*:([^\r\n]+)/);
+    const dtEndMatch = block.match(/DTEND[^:\r\n]*:([^\r\n]+)/);
+    if (!dtStartMatch || !dtEndMatch) continue;
+    const start = toIsoDate(dtStartMatch[1]);
+    const end = toIsoDate(dtEndMatch[1]);
+    if (start && end) events.push({ start, end });
+  }
+  return events;
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+export async function setRoomIcalUrl(roomId: string, icalUrl: string) {
+  try {
+    await db.execute({ sql: "UPDATE rooms SET ical_url = ? WHERE id = ?", args: [icalUrl.trim() || null, roomId] });
+    revalidatePath("/platform");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function syncRoomIcal(roomId: string) {
+  try {
+    const roomRes = await db.execute({ sql: "SELECT ical_url FROM rooms WHERE id = ?", args: [roomId] });
+    const icalUrl = (roomRes.rows[0] as any)?.ical_url as string | undefined;
+    if (!icalUrl) return { success: false, error: "Nessun URL iCal configurato per questa unità." };
+
+    const res = await fetch(icalUrl, { cache: "no-store" });
+    if (!res.ok) return { success: false, error: `Impossibile scaricare il calendario (HTTP ${res.status})` };
+    const icsText = await res.text();
+    const events = parseICSEvents(icsText);
+
+    // Libera le date precedentemente bloccate da un sync iCal (non tocca blocchi manuali o prenotazioni interne)
+    await db.execute({ sql: "UPDATE availability SET status = 'available', blocked_source = NULL WHERE room_id = ? AND blocked_source = 'ical'", args: [roomId] });
+
+    let blockedCount = 0;
+    for (const ev of events) {
+      let d = ev.start;
+      while (d < ev.end) { // DTEND è esclusivo (giorno di check-out)
+        const existing = await db.execute({ sql: "SELECT id, status FROM availability WHERE room_id = ? AND date = ?", args: [roomId, d] });
+        if (existing.rows.length > 0) {
+          await db.execute({ sql: "UPDATE availability SET status = 'blocked', blocked_source = 'ical' WHERE room_id = ? AND date = ?", args: [roomId, d] });
+        } else {
+          await db.execute({ sql: "INSERT INTO availability (id, room_id, date, status, price_snapshot, blocked_source) VALUES (?, ?, ?, 'blocked', '0+0', 'ical')", args: [uid(), roomId, d] });
+        }
+        blockedCount++;
+        d = addDaysIso(d, 1);
+      }
+    }
+
+    await db.execute({ sql: "UPDATE rooms SET ical_last_synced = ? WHERE id = ?", args: [Date.now(), roomId] });
+    revalidatePath("/");
+    revalidatePath("/platform");
+    return { success: true, eventsFound: events.length, datesBlocked: blockedCount };
   } catch (error) { return { success: false, error: String(error) }; }
 }
 

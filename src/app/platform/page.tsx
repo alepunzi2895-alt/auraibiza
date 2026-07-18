@@ -22,6 +22,7 @@ import {
   getPlatformCommissions, upsertPlatformCommission, deletePlatformCommission,
   togglePropertyPublic, togglePropertyManagesAvailability,
   addAgentToConcierge, removeAgentFromConcierge, updateAgentCommissionRate,
+  setRoomIcalUrl, syncRoomIcal,
 } from "../actions";
 
 const IBIZA_CENTER: [number, number] = [38.9067, 1.4206];
@@ -1537,6 +1538,8 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
   const [viewCalendar, setViewCalendar] = useState<string | null>(null);
   const [collaboratorNick, setCollaboratorNick] = useState("");
   const [msg, setMsg] = useState("");
+  const [icalInputs, setIcalInputs] = useState<Record<string, string>>({});
+  const [icalSyncing, setIcalSyncing] = useState<string | null>(null);
 
   // Payment Balance State
   const [balanceModal, setBalanceModal] = useState<any>(null);
@@ -2014,6 +2017,40 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                                <button style={{ ...btn(), padding: "4px 10px", fontSize: 10 }} onClick={() => setViewCalendar(room.id)}>📅 Calendario</button>
                                <button style={{ ...btn(), padding: "4px 8px", fontSize: 13, borderColor: C.danger + "55", color: C.danger }} title="Elimina camera" onClick={async () => { if(confirm(`Eliminare la camera "${room.name}" e tutte le sue prenotazioni? Questa azione è irreversibile.`)) { await deleteRoomAction(room.id); refresh(); } }}>🗑</button>
                             </div>
+                          </div>
+
+                          {/* Sync iCal disponibilità */}
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
+                            <input
+                              type="text"
+                              placeholder="URL calendario iCal (.ics)"
+                              value={icalInputs[room.id] ?? room.ical_url ?? ""}
+                              onChange={e => setIcalInputs(v => ({ ...v, [room.id]: e.target.value }))}
+                              style={{ flex: "1 1 220px", minWidth: 180, padding: "6px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 11 }}
+                            />
+                            <button
+                              style={{ ...btn(), padding: "6px 10px", fontSize: 10 }}
+                              onClick={async () => {
+                                const url = icalInputs[room.id] ?? room.ical_url ?? "";
+                                await setRoomIcalUrl(room.id, url);
+                                setMsg("URL iCal salvato");
+                                refresh();
+                              }}
+                            >💾 Salva</button>
+                            <button
+                              disabled={icalSyncing === room.id || !(room.ical_url || icalInputs[room.id])}
+                              style={{ ...btn(), padding: "6px 10px", fontSize: 10, opacity: icalSyncing === room.id ? 0.6 : 1 }}
+                              onClick={async () => {
+                                setIcalSyncing(room.id);
+                                const res = await syncRoomIcal(room.id);
+                                setIcalSyncing(null);
+                                setMsg(res.success ? `Sincronizzato: ${res.datesBlocked} date bloccate da ${res.eventsFound} prenotazioni` : `Errore: ${res.error}`);
+                                refresh();
+                              }}
+                            >{icalSyncing === room.id ? "⏳ Sync..." : "🔄 Sincronizza"}</button>
+                            {room.ical_last_synced ? (
+                              <span style={{ fontSize: 10, color: C.textDim }}>Ultimo sync: {new Date(room.ical_last_synced).toLocaleString('it-IT')}</span>
+                            ) : null}
                           </div>
 
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
