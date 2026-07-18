@@ -714,7 +714,13 @@ function addDaysIso(iso: string, days: number): string {
 
 export async function setRoomIcalUrl(roomId: string, icalUrl: string) {
   try {
-    await db.execute({ sql: "UPDATE rooms SET ical_url = ? WHERE id = ?", args: [icalUrl.trim() || null, roomId] });
+    const url = icalUrl.trim() || null;
+    await db.execute({ sql: "UPDATE rooms SET ical_url = ? WHERE id = ?", args: [url, roomId] });
+    if (url) {
+      // un URL iCal configurato implica calendario disponibilità live in vetrina
+      await db.execute({ sql: "UPDATE properties SET manages_availability = 1 WHERE id = (SELECT property_id FROM rooms WHERE id = ?)", args: [roomId] });
+    }
+    revalidatePath("/");
     revalidatePath("/platform");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }

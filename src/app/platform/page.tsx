@@ -3240,6 +3240,36 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
   const pendingUsers: User[] = data.pendingUsers || [];
   const commissionRules: any[] = data.commissionRules || [];
 
+  // Prenotazioni: visibilità/editing totale per l'admin
+  const [bkSearch, setBkSearch] = useState("");
+  const [bkStatus, setBkStatus] = useState("");
+  const [bkRoom, setBkRoom] = useState("");
+  const [bkYear, setBkYear] = useState("");
+  const [bkMonth, setBkMonth] = useState("");
+  const allBookings: any[] = data.bookings || [];
+  const filteredBookings = useMemo(() => {
+    return allBookings.filter((b: any) => {
+      const matchSearch = bkSearch ? (b.client_name + " " + (b.client_surname || "")).toLowerCase().includes(bkSearch.toLowerCase()) : true;
+      const matchStatus = bkStatus ? b.status === bkStatus : true;
+      const matchRoom = bkRoom ? b.room_id === bkRoom : true;
+      const matchYear = bkYear ? b.start_date.startsWith(bkYear) : true;
+      const matchMonth = bkMonth ? b.start_date.slice(5, 7) === bkMonth : true;
+      return matchSearch && matchStatus && matchRoom && matchYear && matchMonth;
+    }).sort((a: any, b: any) => b.start_date.localeCompare(a.start_date));
+  }, [allBookings, bkSearch, bkStatus, bkRoom, bkYear, bkMonth]);
+
+  const handleAdminStatusChange = async (id: string, status: string) => {
+    await updateBookingStatus(id, status);
+    setMsg("Stato prenotazione aggiornato");
+    refresh();
+  };
+  const handleAdminDeleteBooking = async (id: string) => {
+    if (!confirm("Eliminare questa prenotazione? Questa azione è irreversibile.")) return;
+    await deleteBookingAction(id);
+    setMsg("Prenotazione eliminata");
+    refresh();
+  };
+
   const handleApprove = async (userId: string) => {
     await approveUser(userId);
     setMsg("Utente approvato");
@@ -3369,6 +3399,7 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
           { key: "users", l: "👥 Utenti" },
           { key: "pending", l: `⏳ In Attesa${pendingUsers.length > 0 ? ` (${pendingUsers.length})` : ""}` },
           { key: "addasset", l: "➕ Aggiungi Asset" },
+          { key: "bookings", l: `📖 Prenotazioni (${allBookings.length})` },
           { key: "requests", l: "📥 Richieste Clienti" },
           { key: "platform", l: "⚙️ Commissioni" },
           { key: "commissions", l: "💰 Fee Concierge" },
@@ -3411,6 +3442,80 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "bookings" && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+              <h2 style={{ ...h2Style, margin: 0 }}>Prenotazioni — tutte le proprietà</h2>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <input placeholder="🔍 Cerca cliente..." style={{ ...input, width: 180, padding: "6px 12px" }} value={bkSearch} onChange={e => setBkSearch(e.target.value)} />
+                <select style={{ ...sel, width: 140, padding: "6px 12px" }} value={bkStatus} onChange={e => setBkStatus(e.target.value)}>
+                  <option value="">Tutti gli stati</option>
+                  {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+                <select style={{ ...sel, width: 160, padding: "6px 12px" }} value={bkRoom} onChange={e => setBkRoom(e.target.value)}>
+                  <option value="">Tutte le unità</option>
+                  {(data.rooms || []).map((r: any) => {
+                    const p = (data.properties || []).find((prop: any) => prop.id === r.property_id);
+                    return <option key={r.id} value={r.id}>{p ? `${p.name} - ` : ""}{r.name}</option>;
+                  })}
+                </select>
+                <select style={{ ...sel, width: 90, padding: "6px 12px" }} value={bkYear} onChange={e => setBkYear(e.target.value)}>
+                  <option value="">Anno</option>
+                  {YEARS.map(y => <option key={y} value={String(y)}>{y}</option>)}
+                </select>
+                <select style={{ ...sel, width: 110, padding: "6px 12px" }} value={bkMonth} onChange={e => setBkMonth(e.target.value)}>
+                  <option value="">Mese</option>
+                  {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {filteredBookings.length === 0 ? <div style={{ ...card, textAlign: "center", color: C.textDim }}>Nessuna prenotazione trovata.</div> : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                  <thead>
+                    <tr>
+                      {["Cliente", "Proprietà / Unità", "Date", "Owner", "Concierge/Agent", "Totale", "Status", "Azioni"].map(h => (
+                        <th key={h} style={{ ...th, fontSize: 9 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>{filteredBookings.map((b: any) => {
+                    const room = (data.rooms || []).find((r: any) => r.id === b.room_id);
+                    const prop = (data.properties || []).find((p: any) => p.id === room?.property_id);
+                    const owner = (data.users || []).find((u: any) => u.id === prop?.owner_id);
+                    const concierge = (data.users || []).find((u: any) => u.id === b.concierge_id);
+                    const st = STATUS_MAP[b.status] || { label: b.status, color: C.textDim };
+                    return (
+                      <tr key={b.id}>
+                        <td style={td}>{b.client_name} {b.client_surname}</td>
+                        <td style={td}>
+                          <span style={{ fontSize: 10 }}>{prop ? `${prop.name} - ` : ""}{room?.name}</span>
+                        </td>
+                        <td style={{ ...td, whiteSpace: "nowrap" }}>
+                          {formatDate(b.start_date)} → {formatDate(b.end_date)}
+                          <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
+                        </td>
+                        <td style={{ ...td, fontSize: 10 }}>{owner?.nickname || "—"}</td>
+                        <td style={{ ...td, fontSize: 10 }}>{concierge?.nickname || "—"}</td>
+                        <td style={{ ...td, fontWeight: 700 }}>€{b.total_price}</td>
+                        <td style={td}>
+                          <select style={{ ...sel, fontSize: 10, padding: "4px 8px", width: 130 }} value={b.status} onChange={e => handleAdminStatusChange(b.id, e.target.value)}>
+                            {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                          </select>
+                        </td>
+                        <td style={td}>
+                          <button style={{ ...btn(), fontSize: 10, padding: "4px 10px", color: C.danger, borderColor: C.danger + "44" }} onClick={() => handleAdminDeleteBooking(b.id)}>Elimina</button>
+                        </td>
+                      </tr>
+                    );
+                  })}</tbody>
+                </table>
               </div>
             )}
           </div>
