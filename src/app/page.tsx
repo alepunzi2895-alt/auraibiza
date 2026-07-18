@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, CSSProperties } from "react";
-import { getPublicListings, createBookingRequest, getPublicRoomAvailability } from "./actions";
+import { useState, useEffect, useMemo, useRef, CSSProperties } from "react";
+import "leaflet/dist/leaflet.css";
+import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf } from "./actions";
 
 // ─── Design tokens (standalone, no import from platform) ─────────────────────
 const C = {
@@ -200,10 +201,105 @@ function PublicCalendar({ roomId, onRangeSelect, selectedRange }: {
   );
 }
 
+// ─── Property Map View ─────────────────────────────────────────────────────────
+const IBIZA_CENTER: [number, number] = [38.9067, 1.4206];
+
+function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect }: {
+  properties: any[];
+  getRoomsForProperty: (id: string) => any[];
+  getPricing: (roomId: string) => any;
+  onSelect: (prop: any) => void;
+}) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstance = useRef<any>(null);
+  const markersLayer = useRef<any>(null);
+
+  const geoProperties = useMemo(() => properties.filter((p: any) => p.latitude != null && p.longitude != null), [properties]);
+  const missingCount = properties.length - geoProperties.length;
+
+  useEffect(() => {
+    let cancelled = false;
+    import("leaflet").then((L) => {
+      if (cancelled || !mapRef.current) return;
+      if (!mapInstance.current) {
+        const map = L.map(mapRef.current, { center: IBIZA_CENTER, zoom: 10 });
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+          attribution: "© OpenStreetMap contributors © CARTO",
+          maxZoom: 19,
+        }).addTo(map);
+        mapInstance.current = map;
+        markersLayer.current = L.layerGroup().addTo(map);
+      }
+      const map = mapInstance.current;
+      markersLayer.current.clearLayers();
+      const icon = L.icon({
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        iconSize: [25, 41], iconAnchor: [12, 41],
+      });
+      const bounds: [number, number][] = [];
+      geoProperties.forEach((prop: any) => {
+        const lat = parseFloat(prop.latitude);
+        const lng = parseFloat(prop.longitude);
+        bounds.push([lat, lng]);
+        const rooms = getRoomsForProperty(prop.id);
+        const images = parseImages(prop.image);
+        const cover = images[0];
+        const minPrice = rooms.reduce((min: number, r: any) => {
+          const pr = getPricing(r.id);
+          const p = pr?.min_price ?? Infinity;
+          return p < min ? p : min;
+        }, Infinity);
+        const popupId = `map-popup-${prop.id}`;
+        const popupHtml = `
+          <div style="font-family: ${FONT_B}; width: 200px;">
+            ${cover ? `<img src="${cover}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;" />` : ""}
+            <div style="font-family:${FONT};font-size:16px;color:${C.goldLight};margin-bottom:4px;">${prop.name}</div>
+            <div style="font-size:11px;color:${C.textMuted};margin-bottom:6px;">📍 ${prop.location}</div>
+            ${minPrice < Infinity ? `<div style="font-size:12px;color:${C.gold};margin-bottom:8px;">da €${minPrice}/notte</div>` : ""}
+            <button id="${popupId}" style="width:100%;padding:8px;border:none;border-radius:6px;background:linear-gradient(135deg, ${C.goldDark}, ${C.gold});color:#080B0F;font-weight:600;font-size:11px;cursor:pointer;">Vedi dettagli →</button>
+          </div>
+        `;
+        const marker = L.marker([lat, lng], { icon }).addTo(markersLayer.current);
+        marker.bindPopup(popupHtml);
+        marker.on("popupopen", () => {
+          const btn = document.getElementById(popupId);
+          if (btn) btn.onclick = () => onSelect(prop);
+        });
+      });
+      if (bounds.length > 0) {
+        map.fitBounds(bounds as any, { padding: [40, 40], maxZoom: 14 });
+      } else {
+        map.setView(IBIZA_CENTER, 10);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [geoProperties, getRoomsForProperty, getPricing, onSelect]);
+
+  useEffect(() => {
+    return () => {
+      if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; }
+    };
+  }, []);
+
+  return (
+    <div>
+      <div ref={mapRef} style={{ height: 520, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}` }} />
+      {missingCount > 0 && (
+        <div style={{ marginTop: 12, fontSize: 12, color: C.textDim, textAlign: "center" }}>
+          {missingCount} {missingCount === 1 ? "proprietà non è" : "proprietà non sono"} ancora geolocalizzata — visibile solo in griglia.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function LandingPage() {
   const [listings, setListings] = useState<any>({ properties: [], rooms: [], pricing: [], referralValid: false });
   const [activeCat, setActiveCat] = useState("all");
+  const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
+  const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
   // modal prenotazione form (vecchio)
   const [modal, setModal] = useState<{ property: any; room: any } | null>(null);
   // modal dettaglio asset (nuovo)
@@ -456,11 +552,41 @@ export default function LandingPage() {
           })}
         </div>
 
+        {/* View toggle: grid / map */}
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 32 }}>
+          {([{ key: "grid", icon: "🔲", label: "Griglia" }, { key: "map", icon: "🗺", label: "Mappa" }] as const).map(v => {
+            const active = viewMode === v.key;
+            return (
+              <button key={v.key} onClick={() => setViewMode(v.key)} style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "8px 18px", borderRadius: 8,
+                border: active ? `1px solid ${C.borderGold}` : `1px solid ${C.border}`,
+                background: active ? C.goldGlow : "rgba(255,255,255,0.03)",
+                color: active ? C.gold : C.textMuted, cursor: "pointer",
+                fontFamily: FONT_B, fontSize: 11, fontWeight: 600, letterSpacing: "0.5px", textTransform: "uppercase",
+                transition: "all 0.2s",
+              }}>
+                <span>{v.icon}</span><span>{v.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Property cards */}
         {filteredProperties.length === 0 ? (
           <div style={{ textAlign: "center", color: C.textDim, padding: "80px 0", fontSize: 15 }}>
             Nessun servizio disponibile in questa categoria al momento.
           </div>
+        ) : viewMode === "map" ? (
+          <PropertyMapView
+            properties={filteredProperties}
+            getRoomsForProperty={getRoomsForProperty}
+            getPricing={getPricing}
+            onSelect={(prop) => {
+              setDetailModal(prop);
+              setDetailRoom(getRoomsForProperty(prop.id)[0] || null);
+              setDetailRange({ start: null, end: null });
+            }}
+          />
         ) : (
           <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
             {filteredProperties.map((prop: any) => {
@@ -719,7 +845,20 @@ export default function LandingPage() {
                   <div>
                     <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 6 }}>{assetIcon[prop.asset_type]} {prop.asset_type}</div>
                     <h2 style={{ fontFamily: FONT, fontSize: 30, fontWeight: 300, color: C.goldLight, marginBottom: 6, letterSpacing: "1px" }}>{prop.name}</h2>
-                    <div style={{ fontSize: 13, color: C.textMuted }}>📍 {prop.location}</div>
+                    <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 10 }}>📍 {prop.location}</div>
+                    {prop.has_pdf ? (
+                      <button
+                        disabled={pdfLoadingId === prop.id}
+                        onClick={async () => {
+                          setPdfLoadingId(prop.id);
+                          const res = await getPropertyPdf(prop.id);
+                          setPdfLoadingId(null);
+                          if (res.pdf_document) window.open(res.pdf_document, "_blank");
+                        }}
+                        style={{ ...btn("outline"), padding: "6px 14px", fontSize: 11 }}>
+                        {pdfLoadingId === prop.id ? "Caricamento…" : "📄 Scheda PDF"}
+                      </button>
+                    ) : null}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 10, color: C.textDim, letterSpacing: "1px", textTransform: "uppercase" }}>da</div>

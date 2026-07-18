@@ -80,6 +80,10 @@ export async function initDatabase() {
       "ALTER TABLE bookings ADD COLUMN agent_id TEXT",
       "ALTER TABLE bookings ADD COLUMN concierge_commission_on_agent REAL DEFAULT 0",
       "ALTER TABLE collaborations ADD COLUMN collaborator_role TEXT DEFAULT 'concierge'",
+      "ALTER TABLE properties ADD COLUMN latitude REAL",
+      "ALTER TABLE properties ADD COLUMN longitude REAL",
+      "ALTER TABLE properties ADD COLUMN pdf_document TEXT",
+      "ALTER TABLE properties ADD COLUMN pdf_name TEXT",
     ];
     for (const sql of migrations) {
       try { await db.execute(sql); } catch (_e) {}
@@ -428,9 +432,9 @@ export async function recordFinalBalance(bookingId: string, p: any, _storno?: an
   } catch (error) { console.error(error); }
 }
 
-export async function updatePropertyAction(id: string, name: string, location: string, description: string) {
+export async function updatePropertyAction(id: string, name: string, location: string, description: string, latitude?: number | null, longitude?: number | null) {
   try {
-    await db.execute({ sql: "UPDATE properties SET name = ?, location = ?, description = ? WHERE id = ?", args: [name, location, description, id] });
+    await db.execute({ sql: "UPDATE properties SET name = ?, location = ?, description = ?, latitude = ?, longitude = ? WHERE id = ?", args: [name, location, description, latitude ?? null, longitude ?? null, id] });
     revalidatePath("/");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
@@ -474,13 +478,37 @@ export async function removePropertyImage(id: string, index: number) {
   } catch (error) { return { success: false, error: String(error) }; }
 }
 
-export async function addProperty(owner_id: string, name: string, location: string, description: string, assetType = 'apartment') {
+export async function addProperty(owner_id: string, name: string, location: string, description: string, assetType = 'apartment', latitude?: number | null, longitude?: number | null) {
   try {
     const id = `p${uid()}`;
-    await db.execute({ sql: "INSERT INTO properties (id, owner_id, name, location, description, asset_type) VALUES (?, ?, ?, ?, ?, ?)", args: [id, owner_id, name, location, description || "", assetType] });
+    await db.execute({ sql: "INSERT INTO properties (id, owner_id, name, location, description, asset_type, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", args: [id, owner_id, name, location, description || "", assetType, latitude ?? null, longitude ?? null] });
     revalidatePath("/");
     return id;
   } catch (error) { console.error(error); return ""; }
+}
+
+export async function updatePropertyPdf(id: string, base64: string, fileName: string) {
+  try {
+    await db.execute({ sql: "UPDATE properties SET pdf_document = ?, pdf_name = ? WHERE id = ?", args: [base64, fileName, id] });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function removePropertyPdf(id: string) {
+  try {
+    await db.execute({ sql: "UPDATE properties SET pdf_document = NULL, pdf_name = NULL WHERE id = ?", args: [id] });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function getPropertyPdf(id: string) {
+  try {
+    const res = await db.execute({ sql: "SELECT pdf_document, pdf_name FROM properties WHERE id = ?", args: [id] });
+    const row = res.rows[0] as any;
+    return { pdf_document: row?.pdf_document || null, pdf_name: row?.pdf_name || null };
+  } catch (error) { return { pdf_document: null, pdf_name: null, error: String(error) }; }
 }
 
 export async function addRoomWithPricing(propertyId: string, name: string, capacity: number, description: string) {
@@ -508,7 +536,8 @@ export async function addRoomWithPricing(propertyId: string, name: string, capac
       if (avBatch.length > 0) await db.batch(avBatch, "write");
     }
     revalidatePath("/");
-  } catch (error) { console.error(error); }
+    return roomId;
+  } catch (error) { console.error(error); return ""; }
 }
 
 export async function updateRoomAction(roomId: string, name: string, capacity: number, description: string) {
@@ -638,6 +667,49 @@ export async function batchUpdateAvailabilityAction(roomId: string, updates: Rec
       } else {
         await db.execute({ sql: "INSERT INTO availability (id, room_id, date, status, price_snapshot) VALUES (?, ?, ?, ?, ?)", args: [uid(), roomId, date, status, "0+0"] });
       }
+    }
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+export async function createManagedUser(nickname: string, role: "owner" | "concierge" | "agent", firstName?: string, lastName?: string) {
+  try {
+    const nick = nickname.toLowerCase().trim();
+    const existing = await db.execute({ sql: "SELECT id FROM users WHERE nickname = ?", args: [nick] });
+    if (existing.rows.length > 0) return { success: true, id: (existing.rows[0] as any).id, alreadyExisted: true };
+    const id = `u${uid()}`;
+    await db.execute({
+      sql: "INSERT INTO users (id, nickname, role, status, first_name, last_name, created_at) VALUES (?, ?, ?, 'active', ?, ?, ?)",
+      args: [id, nick, role, firstName || "", lastName || "", Date.now()],
+    });
+    revalidatePath("/");
+    return { success: true, id, alreadyExisted: false };
+  } catch (error) { return { success: false, error: String(error), id: "" }; }
+}
+
+export async function bulkSetRoomPricing(roomId: string, monthly: { month: string; basePrice: number; cleaningFee: number }[]) {
+  try {
+    for (const { month, basePrice, cleaningFee } of monthly) {
+      const existing = await db.execute({ sql: "SELECT id FROM pricing WHERE room_id = ? AND month = ?", args: [roomId, month] });
+      if (existing.rows.length > 0) {
+        await db.execute({ sql: "UPDATE pricing SET base_price = ?, cleaning_fee = ? WHERE room_id = ? AND month = ?", args: [basePrice, cleaningFee, roomId, month] });
+      } else {
+        await db.execute({ sql: "INSERT INTO pricing (id, room_id, month, base_price, cleaning_fee) VALUES (?, ?, ?, ?, ?)", args: [`pr${uid()}`, roomId, month, basePrice, cleaningFee] });
+      }
+      const [y, m] = month.split("-").map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      const avBatch: any[] = [];
+      for (let d = 1; d <= lastDay; d++) {
+        const date = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const existingAv = await db.execute({ sql: "SELECT id FROM availability WHERE room_id = ? AND date = ?", args: [roomId, date] });
+        if (existingAv.rows.length > 0) {
+          avBatch.push({ sql: "UPDATE availability SET price_snapshot = ? WHERE room_id = ? AND date = ?", args: [`${basePrice}+${cleaningFee}`, roomId, date] });
+        } else {
+          avBatch.push({ sql: "INSERT INTO availability (id, room_id, date, status, price_snapshot) VALUES (?, ?, ?, 'available', ?)", args: [`av${uid()}`, roomId, date, `${basePrice}+${cleaningFee}`] });
+        }
+      }
+      if (avBatch.length > 0) await db.batch(avBatch, "write");
     }
     revalidatePath("/");
     return { success: true };
@@ -780,8 +852,8 @@ export async function getPublicListings(referralCode?: string) {
       showAll = refUser.rows.length > 0;
     }
     const propertiesSQL = showAll
-      ? "SELECT id, name, location, description, image, asset_type, is_public, manages_availability FROM properties ORDER BY name ASC"
-      : "SELECT id, name, location, description, image, asset_type, is_public, manages_availability FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
+      ? "SELECT id, name, location, description, image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties ORDER BY name ASC"
+      : "SELECT id, name, location, description, image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
     const properties = await db.execute(propertiesSQL);
     const rooms = await db.execute("SELECT id, property_id, name, capacity, image, description FROM rooms ORDER BY name ASC");
     const pricing = await db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id");

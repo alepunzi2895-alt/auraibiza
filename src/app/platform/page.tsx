@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect, CSSProperties } from "react";
+import { useState, useMemo, useEffect, useRef, CSSProperties } from "react";
+import "leaflet/dist/leaflet.css";
 import {
   getDashboardData, loginOrRegister, createBooking, updateBookingStatus,
   addProperty, addRoomWithPricing, updatePricingAction, getRoomAvailability,
@@ -12,14 +13,68 @@ import {
   addPaymentMethod, deletePaymentMethod,
   updatePropertyAction, updatePropertyImage,
   removePropertyImage, removeRoomImage,
+  updatePropertyPdf, removePropertyPdf,
   deletePropertyAction, deleteRoomAction,
   changePasswordAction, approveUser, rejectUser, updateUserRole, deleteUserAction,
   setCommissionRule, updatePropertyAssetType,
+  createManagedUser, bulkSetRoomPricing,
   getBookingRequests, updateBookingRequestStatus,
   getPlatformCommissions, upsertPlatformCommission, deletePlatformCommission,
   togglePropertyPublic, togglePropertyManagesAvailability,
   addAgentToConcierge, removeAgentFromConcierge, updateAgentCommissionRate,
 } from "../actions";
+
+const IBIZA_CENTER: [number, number] = [38.9067, 1.4206];
+
+function LocationPicker({ lat, lng, onChange }: { lat: string; lng: string; onChange: (lat: string, lng: string) => void }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstance = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("leaflet").then((L) => {
+      if (cancelled || !mapRef.current || mapInstance.current) return;
+      const icon = L.icon({
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        iconSize: [25, 41], iconAnchor: [12, 41],
+      });
+      const initial: [number, number] = lat && lng ? [parseFloat(lat), parseFloat(lng)] : IBIZA_CENTER;
+      const map = L.map(mapRef.current, { center: initial, zoom: lat && lng ? 13 : 10 });
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: "© OpenStreetMap contributors © CARTO",
+        maxZoom: 19,
+      }).addTo(map);
+      if (lat && lng) {
+        markerRef.current = L.marker(initial, { icon }).addTo(map);
+      }
+      map.on("click", (e: any) => {
+        const { lat: clat, lng: clng } = e.latlng;
+        if (markerRef.current) map.removeLayer(markerRef.current);
+        markerRef.current = L.marker([clat, clng], { icon }).addTo(map);
+        onChange(clat.toFixed(6), clng.toFixed(6));
+      });
+      mapInstance.current = map;
+    });
+    return () => {
+      cancelled = true;
+      if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div>
+      <div ref={mapRef} style={{ height: 200, borderRadius: 8, overflow: "hidden", border: "1px solid rgba(200,169,110,0.25)" }} />
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <input placeholder="Latitudine" value={lat} onChange={e => onChange(e.target.value, lng)} style={{ flex: 1, padding: "8px 10px", fontSize: 12, borderRadius: 6, border: "1px solid #1E2433", background: "#161C28", color: "#EDE9E1" }} />
+        <input placeholder="Longitudine" value={lng} onChange={e => onChange(lat, e.target.value)} style={{ flex: 1, padding: "8px 10px", fontSize: 12, borderRadius: 6, border: "1px solid #1E2433", background: "#161C28", color: "#EDE9E1" }} />
+      </div>
+      <div style={{ fontSize: 10, color: "#8A8678", marginTop: 6 }}>Clicca sulla mappa per posizionare il pin, oppure inserisci le coordinate manualmente.</div>
+    </div>
+  );
+}
 
 const calcSplit = (ownerPriceTotal: number, conciergeFee: number, rate: number) => {
   const platformFee = Math.round(ownerPriceTotal * rate / 100 * 100) / 100;
@@ -1464,10 +1519,12 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
   const [newPropLoc, setNewPropLoc] = useState("");
   const [newPropDesc, setNewPropDesc] = useState("");
   const [newPropAssetType, setNewPropAssetType] = useState("apartment");
+  const [newPropLat, setNewPropLat] = useState("");
+  const [newPropLng, setNewPropLng] = useState("");
   const [editPricing, setEditPricing] = useState<{ roomId: string; month: string; basePrice: string; cleaningFee: string } | null>(null);
   const [addPricing, setAddPricing] = useState<{ roomId: string; month: string; basePrice: string; cleaningFee: string } | null>(null);
   const [editRoom, setEditRoom] = useState<{ id: string; name: string; capacity: string; description: string } | null>(null);
-  const [editProperty, setEditProperty] = useState<{ id: string; name: string; location: string; description: string } | null>(null);
+  const [editProperty, setEditProperty] = useState<{ id: string; name: string; location: string; description: string; latitude: string; longitude: string } | null>(null);
   const [viewCalendar, setViewCalendar] = useState<string | null>(null);
   const [collaboratorNick, setCollaboratorNick] = useState("");
   const [msg, setMsg] = useState("");
@@ -1591,6 +1648,25 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
       }
       await updatePropertyImage(propId, base64);
       setMsg("Foto proprietà aggiornata con successo.");
+      refresh();
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePropertyPdfUpload = async (propId: string, file: File) => {
+    if (file.type !== "application/pdf") {
+      alert("Il file deve essere un PDF.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Il PDF è troppo grande. Massimo 10MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target?.result as string;
+      await updatePropertyPdf(propId, base64, file.name);
+      setMsg("Scheda PDF aggiornata con successo.");
       refresh();
     };
     reader.readAsDataURL(file);
@@ -1756,8 +1832,10 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
 
   const handleAddProperty = async () => {
     if (!newPropName || !newPropLoc) return alert("Inserisci nome e località");
-    await addProperty(user.id, newPropName, newPropLoc, newPropDesc, newPropAssetType);
-    setNewPropName(""); setNewPropLoc(""); setNewPropDesc(""); setNewPropAssetType("apartment");
+    const lat = newPropLat ? parseFloat(newPropLat) : null;
+    const lng = newPropLng ? parseFloat(newPropLng) : null;
+    await addProperty(user.id, newPropName, newPropLoc, newPropDesc, newPropAssetType, lat, lng);
+    setNewPropName(""); setNewPropLoc(""); setNewPropDesc(""); setNewPropAssetType("apartment"); setNewPropLat(""); setNewPropLng("");
     setMsg("Proprietà creata con successo");
     refresh();
   };
@@ -1860,6 +1938,22 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handlePropertyImageUpload(prop.id, f); }} />
                           </label>
                         </div>
+
+                        {/* Scheda PDF */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+                          {prop.pdf_name ? (
+                            <>
+                              <span style={{ fontSize: 12, color: C.gold }}>📄 {prop.pdf_name}</span>
+                              <a href={prop.pdf_document} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: C.textMuted }}>Apri</a>
+                              <button onClick={async () => { if (confirm("Rimuovere il PDF?")) { await removePropertyPdf(prop.id); setMsg("PDF rimosso"); refresh(); } }} style={{ ...btn(), padding: "3px 10px", fontSize: 10, color: C.danger, borderColor: C.danger + "55" }}>Rimuovi</button>
+                            </>
+                          ) : (
+                            <label style={{ ...btn(), padding: "5px 12px", fontSize: 11, cursor: "pointer" }}>
+                              + Carica scheda PDF
+                              <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handlePropertyPdfUpload(prop.id, f); }} />
+                            </label>
+                          )}
+                        </div>
                       </div>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 4, flexWrap: "wrap" }}>
                         {/* Toggle visibilità vetrina */}
@@ -1890,7 +1984,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                           <span>{prop.manages_availability ? "📅" : "💬"}</span>
                           <span>{prop.manages_availability ? "Calendario live" : "Solo WhatsApp"}</span>
                         </button>
-                        <button style={{ ...btn(), padding: "6px 12px", fontSize: 11 }} onClick={() => setEditProperty({ id: prop.id, name: prop.name, location: prop.location, description: prop.description || "" })}>✏️ Modifica</button>
+                        <button style={{ ...btn(), padding: "6px 12px", fontSize: 11 }} onClick={() => setEditProperty({ id: prop.id, name: prop.name, location: prop.location, description: prop.description || "", latitude: prop.latitude != null ? String(prop.latitude) : "", longitude: prop.longitude != null ? String(prop.longitude) : "" })}>✏️ Modifica</button>
                         <button style={{ ...btn(), padding: "6px 10px", fontSize: 14, borderColor: C.danger + "55", color: C.danger }} title="Elimina proprietà" onClick={async () => { if(confirm(`Eliminare la proprietà "${prop.name}" e tutte le sue camere/prenotazioni? Questa azione è irreversibile.`)) { await deletePropertyAction(prop.id); refresh(); } }}>🗑</button>
                         <span style={badge(C.goldLight)}>{propRooms.length} unità</span>
                       </div>
@@ -1996,6 +2090,10 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                 <label style={label}>Descrizione</label>
                 <textarea style={{ ...input, minHeight: 80, fontSize: 12 }} value={newPropDesc} onChange={e => setNewPropDesc(e.target.value)} placeholder="Breve descrizione o note sulla proprietà..." />
               </div>
+              <div style={{ marginTop: 12 }}>
+                <label style={label}>Posizione sulla mappa</label>
+                <LocationPicker lat={newPropLat} lng={newPropLng} onChange={(la, lo) => { setNewPropLat(la); setNewPropLng(lo); }} />
+              </div>
               <button style={{ ...btn("gold"), marginTop: 16 }} onClick={handleAddProperty}>Crea Proprietà</button>
             </div>
 
@@ -2008,10 +2106,15 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                     <div><label style={label}>Nome</label><input style={input} value={editProperty.name} onChange={e => setEditProperty({ ...editProperty, name: e.target.value })} /></div>
                     <div><label style={label}>Località</label><input style={input} value={editProperty.location} onChange={e => setEditProperty({ ...editProperty, location: e.target.value })} /></div>
                     <div><label style={label}>Descrizione</label><textarea style={{ ...input, minHeight: 120 }} value={editProperty.description} onChange={e => setEditProperty({ ...editProperty, description: e.target.value })} /></div>
+                    <div><label style={label}>Posizione sulla mappa</label>
+                      <LocationPicker lat={editProperty.latitude} lng={editProperty.longitude} onChange={(la, lo) => setEditProperty({ ...editProperty, latitude: la, longitude: lo })} />
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
                     <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
-                      await updatePropertyAction(editProperty.id, editProperty.name, editProperty.location, editProperty.description);
+                      const lat = editProperty.latitude ? parseFloat(editProperty.latitude) : null;
+                      const lng = editProperty.longitude ? parseFloat(editProperty.longitude) : null;
+                      await updatePropertyAction(editProperty.id, editProperty.name, editProperty.location, editProperty.description, lat, lng);
                       setEditProperty(null);
                       setMsg("Proprietà aggiornata con successo");
                       refresh();
@@ -3117,6 +3220,93 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
     refresh();
   };
 
+  // Add-asset form state
+  const [naOwnerMode, setNaOwnerMode] = useState<"existing" | "new">("existing");
+  const [naOwnerId, setNaOwnerId] = useState("");
+  const [naNewNick, setNaNewNick] = useState("");
+  const [naNewRole, setNaNewRole] = useState<"owner" | "concierge">("owner");
+  const [naConciergeNick, setNaConciergeNick] = useState("");
+  const [naAssetType, setNaAssetType] = useState("villa");
+  const [naName, setNaName] = useState("");
+  const [naLoc, setNaLoc] = useState("");
+  const [naDesc, setNaDesc] = useState("");
+  const [naCapacity, setNaCapacity] = useState("2");
+  const [naImages, setNaImages] = useState<string[]>([]);
+  const [naPdf, setNaPdf] = useState<{ base64: string; name: string } | null>(null);
+  const [naPriceLow, setNaPriceLow] = useState("");
+  const [naPriceMid, setNaPriceMid] = useState("");
+  const [naPriceHigh, setNaPriceHigh] = useState("");
+  const [naCleaningFee, setNaCleaningFee] = useState("0");
+  const [naSubmitting, setNaSubmitting] = useState(false);
+
+  const handleNaImageFiles = async (files: FileList) => {
+    for (const file of Array.from(files)) {
+      if (file.size > 20 * 1024 * 1024) { alert(`${file.name}: troppo grande (max 20MB)`); continue; }
+      const base64: string = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(file);
+      });
+      const compressed = file.size > 1024 * 1024 ? await compressImage(base64) : base64;
+      setNaImages(prev => [...prev, compressed]);
+    }
+  };
+
+  const handleNaPdfFile = (file: File) => {
+    if (file.type !== "application/pdf") { alert("Il file deve essere un PDF."); return; }
+    if (file.size > 10 * 1024 * 1024) { alert("Il PDF è troppo grande (max 10MB)."); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => setNaPdf({ base64: e.target?.result as string, name: file.name });
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddAsset = async () => {
+    if (!naName.trim() || !naLoc.trim()) { alert("Inserisci nome e località/porto/garage"); return; }
+    if (naOwnerMode === "existing" && !naOwnerId) { alert("Seleziona un proprietario"); return; }
+    if (naOwnerMode === "new" && !naNewNick.trim()) { alert("Inserisci il nickname del nuovo proprietario"); return; }
+    const low = parseFloat(naPriceLow || "0") || 0;
+    const mid = naPriceMid ? (parseFloat(naPriceMid) || low) : low;
+    const high = naPriceHigh ? (parseFloat(naPriceHigh) || low) : low;
+    const cleaning = parseFloat(naCleaningFee || "0") || 0;
+
+    setNaSubmitting(true);
+    try {
+      let ownerId = naOwnerId;
+      if (naOwnerMode === "new") {
+        const res = await createManagedUser(naNewNick, naNewRole);
+        if (!res.success || !res.id) { alert("Errore creazione proprietario: " + (res as any).error); return; }
+        ownerId = res.id;
+      }
+      const propId = await addProperty(ownerId, naName, naLoc, naDesc, naAssetType);
+      if (!propId) { alert("Errore nella creazione dell'asset."); return; }
+
+      const roomId = await addRoomWithPricing(propId, naName, Number(naCapacity) || 1, naDesc);
+      if (roomId) {
+        const now = new Date();
+        const monthly: { month: string; basePrice: number; cleaningFee: number }[] = [];
+        for (let i = 0; i < 12; i++) {
+          const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+          const mm = d.getMonth() + 1;
+          const price = (mm === 7 || mm === 8) ? high : (mm === 6 || mm === 9) ? mid : low;
+          monthly.push({ month: `${d.getFullYear()}-${String(mm).padStart(2, "0")}`, basePrice: price, cleaningFee: cleaning });
+        }
+        await bulkSetRoomPricing(roomId, monthly);
+      }
+
+      for (const img of naImages) await updatePropertyImage(propId, img);
+      if (naPdf) await updatePropertyPdf(propId, naPdf.base64, naPdf.name);
+      if (naConciergeNick.trim()) await addCollaboration(propId, naConciergeNick.trim());
+
+      setNaName(""); setNaLoc(""); setNaDesc(""); setNaImages([]); setNaPdf(null);
+      setNaPriceLow(""); setNaPriceMid(""); setNaPriceHigh(""); setNaCleaningFee("0");
+      setNaConciergeNick(""); setNaOwnerId(""); setNaNewNick("");
+      setMsg("Asset creato e pubblicato in vetrina con successo.");
+      refresh();
+    } finally {
+      setNaSubmitting(false);
+    }
+  };
+
   const roleIcon = (r: string) => ({ admin: "👑", owner: "🏠", concierge: "🤵", agent: "👤" }[r] || "👤");
   const totalBookings = (data.bookings || []).length;
   const confirmedBookings = (data.bookings || []).filter((b: any) => b.status === "confirmed_owner" || b.status === "evaso").length;
@@ -3128,6 +3318,7 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
         {[
           { key: "users", l: "👥 Utenti" },
           { key: "pending", l: `⏳ In Attesa${pendingUsers.length > 0 ? ` (${pendingUsers.length})` : ""}` },
+          { key: "addasset", l: "➕ Aggiungi Asset" },
           { key: "requests", l: "📥 Richieste Clienti" },
           { key: "platform", l: "⚙️ Commissioni" },
           { key: "commissions", l: "💰 Fee Concierge" },
@@ -3172,6 +3363,95 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {tab === "addasset" && (
+          <div>
+            <h2 style={h2Style}>Aggiungi Asset (Proprietà / Auto / Barca)</h2>
+            <div style={{ ...card, borderStyle: "dashed", background: "rgba(255,255,255,0.02)", borderColor: C.borderGold }}>
+              <h3 style={h3Style}>Proprietario</h3>
+              <div style={{ display: "flex", gap: 20, marginBottom: 14 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.textMuted }}>
+                  <input type="radio" checked={naOwnerMode === "existing"} onChange={() => setNaOwnerMode("existing")} /> Utente esistente
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.textMuted }}>
+                  <input type="radio" checked={naOwnerMode === "new"} onChange={() => setNaOwnerMode("new")} /> Crea nuovo
+                </label>
+              </div>
+              {naOwnerMode === "existing" ? (
+                <select style={sel} value={naOwnerId} onChange={e => setNaOwnerId(e.target.value)}>
+                  <option value="">— Seleziona proprietario / concierge —</option>
+                  {allUsers.filter(u => ["owner", "concierge", "agent"].includes(u.role)).map(u => (
+                    <option key={u.id} value={u.id}>{roleIcon(u.role)} {u.nickname}</option>
+                  ))}
+                </select>
+              ) : (
+                <div style={grid(2)}>
+                  <div><label style={label}>Nickname</label><input style={input} value={naNewNick} onChange={e => setNaNewNick(e.target.value)} placeholder="es. classyibiza" /></div>
+                  <div>
+                    <label style={label}>Ruolo</label>
+                    <select style={sel} value={naNewRole} onChange={e => setNaNewRole(e.target.value as any)}>
+                      <option value="owner">🏠 Owner</option>
+                      <option value="concierge">🤵 Concierge</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <h3 style={{ ...h3Style, marginTop: 24 }}>Dati Asset</h3>
+              <div style={grid(2)}>
+                <div><label style={label}>Nome</label><input style={input} value={naName} onChange={e => setNaName(e.target.value)} placeholder="es. Villa Roca" /></div>
+                <div><label style={label}>Località / Porto / Garage</label><input style={input} value={naLoc} onChange={e => setNaLoc(e.target.value)} placeholder="Città, Zona, Porto" /></div>
+              </div>
+              <div style={{ ...grid(2), marginTop: 12 }}>
+                <div>
+                  <label style={label}>Tipo</label>
+                  <select style={sel} value={naAssetType} onChange={e => setNaAssetType(e.target.value)}>
+                    {ASSET_TYPES.map(a => <option key={a.v} value={a.v}>{a.l}</option>)}
+                  </select>
+                </div>
+                <div><label style={label}>Capienza (ospiti / posti)</label><input style={input} type="number" min="1" value={naCapacity} onChange={e => setNaCapacity(e.target.value)} /></div>
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <label style={label}>Descrizione</label>
+                <textarea style={{ ...input, minHeight: 80, fontSize: 12 }} value={naDesc} onChange={e => setNaDesc(e.target.value)} placeholder="Breve descrizione..." />
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <label style={label}>Concierge collaboratore (opzionale)</label>
+                <input style={input} value={naConciergeNick} onChange={e => setNaConciergeNick(e.target.value)} placeholder="nickname concierge da collegare a questo asset" />
+              </div>
+
+              <h3 style={{ ...h3Style, marginTop: 24 }}>Prezzi per stagione (a notte / giorno)</h3>
+              <div style={grid(2)}>
+                <div><label style={label}>Bassa stagione (€)</label><input style={input} type="number" value={naPriceLow} onChange={e => setNaPriceLow(e.target.value)} /></div>
+                <div><label style={label}>Media stagione — giu/set (€)</label><input style={input} type="number" value={naPriceMid} onChange={e => setNaPriceMid(e.target.value)} placeholder="default = bassa" /></div>
+                <div><label style={label}>Alta stagione — lug/ago (€)</label><input style={input} type="number" value={naPriceHigh} onChange={e => setNaPriceHigh(e.target.value)} placeholder="default = bassa" /></div>
+                <div><label style={label}>Cleaning fee (€)</label><input style={input} type="number" value={naCleaningFee} onChange={e => setNaCleaningFee(e.target.value)} /></div>
+              </div>
+
+              <h3 style={{ ...h3Style, marginTop: 24 }}>Foto</h3>
+              <input type="file" accept="image/*" multiple onChange={e => { if (e.target.files) handleNaImageFiles(e.target.files); }} />
+              {naImages.length > 0 && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                  {naImages.map((img, i) => (
+                    <div key={i} style={{ position: "relative" }}>
+                      <img src={img} style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 6, border: `1px solid ${C.border}` }} />
+                      <span style={{ position: "absolute", top: -6, right: -6, background: C.bg, borderRadius: "50%", width: 18, height: 18, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${C.border}` }} onClick={() => setNaImages(prev => prev.filter((_, idx) => idx !== i))}>✕</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h3 style={{ ...h3Style, marginTop: 24 }}>Scheda PDF (opzionale)</h3>
+              <input type="file" accept="application/pdf" onChange={e => { const f = e.target.files?.[0]; if (f) handleNaPdfFile(f); }} />
+              {naPdf && (
+                <div style={{ fontSize: 12, color: C.gold, marginTop: 8 }}>📄 {naPdf.name} <span style={{ cursor: "pointer", opacity: 0.7 }} onClick={() => setNaPdf(null)}>✕</span></div>
+              )}
+
+              <div style={{ fontSize: 11, color: C.textDim, marginTop: 18 }}>L'asset sarà pubblicato subito, visibile in vetrina pubblica.</div>
+              <button style={{ ...btn("gold"), marginTop: 12 }} disabled={naSubmitting} onClick={handleAddAsset}>{naSubmitting ? "Creazione in corso..." : "Crea Asset"}</button>
+            </div>
           </div>
         )}
 
