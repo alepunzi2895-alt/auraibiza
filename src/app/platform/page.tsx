@@ -1533,7 +1533,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
   const [newPropLng, setNewPropLng] = useState("");
   const [editPricing, setEditPricing] = useState<{ roomId: string; month: string; basePrice: string; cleaningFee: string } | null>(null);
   const [addPricing, setAddPricing] = useState<{ roomId: string; month: string; basePrice: string; cleaningFee: string } | null>(null);
-  const [editRoom, setEditRoom] = useState<{ id: string; name: string; capacity: string; description: string } | null>(null);
+  const [editRoom, setEditRoom] = useState<{ id: string; name: string; capacity: string; description: string; bedrooms: string; bathrooms: string } | null>(null);
   const [editProperty, setEditProperty] = useState<{ id: string; name: string; location: string; description: string; latitude: string; longitude: string } | null>(null);
   const [viewCalendar, setViewCalendar] = useState<string | null>(null);
   const [collaboratorNick, setCollaboratorNick] = useState("");
@@ -1861,7 +1861,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
 
   const handleUpdateRoom = async () => {
     if (!editRoom) return;
-    await updateRoomAction(editRoom.id, editRoom.name, Number(editRoom.capacity), editRoom.description);
+    await updateRoomAction(editRoom.id, editRoom.name, Number(editRoom.capacity), editRoom.description, editRoom.bedrooms ? Number(editRoom.bedrooms) : null, editRoom.bathrooms ? Number(editRoom.bathrooms) : null);
     setEditRoom(null); setMsg("Stanza aggiornata");
     refresh();
   };
@@ -2010,10 +2010,10 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 16 }}>
                             <div>
                                <strong style={{ fontSize: 15, color: C.goldLight }}>{room.name}</strong>
-                               <div style={{ color: C.textMuted, fontSize: 11 }}>Capacità: {room.capacity} ospiti</div>
+                               <div style={{ color: C.textMuted, fontSize: 11 }}>Capacità: {room.capacity} ospiti{room.bedrooms ? ` · ${room.bedrooms} camere` : ""}{room.bathrooms ? ` · ${room.bathrooms} bagni` : ""}</div>
                             </div>
                             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                               <button style={{ ...btn(), padding: "4px 8px", fontSize: 10 }} onClick={() => setEditRoom({ id: room.id, name: room.name, capacity: String(room.capacity), description: room.description || "" })}>✏️ Modifica</button>
+                               <button style={{ ...btn(), padding: "4px 8px", fontSize: 10 }} onClick={() => setEditRoom({ id: room.id, name: room.name, capacity: String(room.capacity), description: room.description || "", bedrooms: room.bedrooms != null ? String(room.bedrooms) : "", bathrooms: room.bathrooms != null ? String(room.bathrooms) : "" })}>✏️ Modifica</button>
                                <button style={{ ...btn(), padding: "4px 10px", fontSize: 10 }} onClick={() => setViewCalendar(room.id)}>📅 Calendario</button>
                                <button style={{ ...btn(), padding: "4px 8px", fontSize: 13, borderColor: C.danger + "55", color: C.danger }} title="Elimina camera" onClick={async () => { if(confirm(`Eliminare la camera "${room.name}" e tutte le sue prenotazioni? Questa azione è irreversibile.`)) { await deleteRoomAction(room.id); refresh(); } }}>🗑</button>
                             </div>
@@ -2953,6 +2953,10 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
             <h3 style={h3Style}>Modifica Camera</h3>
             <div style={{ marginBottom: 12 }}><label style={label}>Nome</label><input style={input} value={editRoom.name} onChange={e => setEditRoom({ ...editRoom, name: e.target.value })} /></div>
             <div style={{ marginBottom: 12 }}><label style={label}>Capacità</label><input style={input} type="number" value={editRoom.capacity} onChange={e => setEditRoom({ ...editRoom, capacity: e.target.value })} /></div>
+            <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+              <div style={{ flex: 1 }}><label style={label}>Camere da letto</label><input style={input} type="number" value={editRoom.bedrooms} onChange={e => setEditRoom({ ...editRoom, bedrooms: e.target.value })} /></div>
+              <div style={{ flex: 1 }}><label style={label}>Bagni</label><input style={input} type="number" value={editRoom.bathrooms} onChange={e => setEditRoom({ ...editRoom, bathrooms: e.target.value })} /></div>
+            </div>
             <div style={{ marginBottom: 16 }}><label style={label}>Descrizione</label><textarea style={{ ...input, minHeight: 80, resize: "vertical" }} value={editRoom.description} onChange={e => setEditRoom({ ...editRoom, description: e.target.value })} placeholder="Descrizione dell'appartamento..." /></div>
             <div style={{ display: "flex", gap: 8 }}>
               <button style={{ ...btn("gold"), flex: 1 }} onClick={handleUpdateRoom}>Salva</button>

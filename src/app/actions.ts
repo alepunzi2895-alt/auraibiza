@@ -551,9 +551,9 @@ export async function addRoomWithPricing(propertyId: string, name: string, capac
   } catch (error) { console.error(error); return ""; }
 }
 
-export async function updateRoomAction(roomId: string, name: string, capacity: number, description: string) {
+export async function updateRoomAction(roomId: string, name: string, capacity: number, description: string, bedrooms?: number | null, bathrooms?: number | null) {
   try {
-    await db.execute({ sql: "UPDATE rooms SET name = ?, capacity = ?, description = ? WHERE id = ?", args: [name, capacity, description || "", roomId] });
+    await db.execute({ sql: "UPDATE rooms SET name = ?, capacity = ?, description = ?, bedrooms = ?, bathrooms = ? WHERE id = ?", args: [name, capacity, description || "", bedrooms ?? null, bathrooms ?? null, roomId] });
     revalidatePath("/");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
@@ -942,7 +942,7 @@ export async function getPublicListings(referralCode?: string) {
       ? "SELECT id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties ORDER BY name ASC"
       : "SELECT id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
     const properties = await db.execute(propertiesSQL);
-    const rooms = await db.execute("SELECT id, property_id, name, capacity, description FROM rooms ORDER BY name ASC");
+    const rooms = await db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms FROM rooms ORDER BY name ASC");
     const pricing = await db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id");
     return {
       properties: properties.rows,

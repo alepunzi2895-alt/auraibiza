@@ -932,7 +932,7 @@ export default function LandingPage() {
                               transition: "all 0.2s" }}>
                             <div style={{ fontWeight: 600, color: isSelected ? C.gold : C.text, fontSize: 13 }}>{r.name}</div>
                             <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
-                              {r.capacity} ospiti {pr ? `· €${pr.min_price}${unitSuffix(prop.asset_type)}` : ""}
+                              {r.capacity} ospiti{r.bedrooms ? ` · ${r.bedrooms} camere` : ""}{r.bathrooms ? ` · ${r.bathrooms} bagni` : ""} {pr ? `· €${pr.min_price}${unitSuffix(prop.asset_type)}` : ""}
                             </div>
                             {r.description && <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{r.description}</div>}
                           </div>
