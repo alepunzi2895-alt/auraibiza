@@ -27,6 +27,15 @@ const assetIcon: Record<string, string> = {
   apartment:"🏠", villa:"🏡", boat:"⛵", car:"🚗", scooter:"🛵",
 };
 
+// Auto, scooter e barche si prenotano a giorno (non a notte come ville/appartamenti)
+const isDayBasedAsset = (assetType?: string) => assetType === "car" || assetType === "scooter" || assetType === "boat";
+const unitLabel = (assetType: string | undefined, count: number) => {
+  const day = isDayBasedAsset(assetType);
+  if (day) return count === 1 ? "giorno" : "giorni";
+  return count === 1 ? "notte" : "notti";
+};
+const unitSuffix = (assetType?: string) => isDayBasedAsset(assetType) ? "/giorno" : "/notte";
+
 // ─── Utils ───────────────────────────────────────────────────────────────────
 const parseImages = (raw?: string): string[] => {
   if (!raw) return [];
@@ -63,10 +72,11 @@ const WA_NUMBER = "34645265430";
 const MONTH_NAMES = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 
 // ─── Public Calendar ─────────────────────────────────────────────────────────
-function PublicCalendar({ roomId, onRangeSelect, selectedRange }: {
+function PublicCalendar({ roomId, onRangeSelect, selectedRange, assetType }: {
   roomId: string;
   onRangeSelect: (start: string | null, end: string | null) => void;
   selectedRange: { start: string | null; end: string | null };
+  assetType?: string;
 }) {
   const today = new Date();
   const [ym, setYm] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
@@ -194,7 +204,7 @@ function PublicCalendar({ roomId, onRangeSelect, selectedRange }: {
       </div>
       {nights > 0 && (
         <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: C.gold, fontFamily: FONT }}>
-          {nights} {nights === 1 ? "notte" : "notti"} selezionate
+          {nights} {unitLabel(assetType, nights)} selezionate
         </div>
       )}
     </div>
@@ -256,7 +266,7 @@ function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect
             ${cover ? `<img src="${cover}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;" />` : ""}
             <div style="font-family:${FONT};font-size:16px;color:${C.goldLight};margin-bottom:4px;">${prop.name}</div>
             <div style="font-size:11px;color:${C.textMuted};margin-bottom:6px;">📍 ${prop.location}</div>
-            ${minPrice < Infinity ? `<div style="font-size:12px;color:${C.gold};margin-bottom:8px;">da €${minPrice}/notte</div>` : ""}
+            ${minPrice < Infinity ? `<div style="font-size:12px;color:${C.gold};margin-bottom:8px;">da €${minPrice}${unitSuffix(prop.asset_type)}</div>` : ""}
             <button id="${popupId}" style="width:100%;padding:8px;border:none;border-radius:6px;background:linear-gradient(135deg, ${C.goldDark}, ${C.gold});color:#080B0F;font-weight:600;font-size:11px;cursor:pointer;">Vedi dettagli →</button>
           </div>
         `;
@@ -638,7 +648,7 @@ export default function LandingPage() {
                     {minPrice < Infinity && (
                       <div style={{ position: "absolute", bottom: 14, right: 14, textAlign: "right" }}>
                         <div style={{ fontSize: 9, color: C.textMuted, letterSpacing: "1px", textTransform: "uppercase" }}>da</div>
-                        <div style={{ fontFamily: FONT, fontSize: 26, fontWeight: 400, color: C.goldLight, lineHeight: 1 }}>€{minPrice}<span style={{ fontSize: 12, fontWeight: 300 }}>/notte</span></div>
+                        <div style={{ fontFamily: FONT, fontSize: 26, fontWeight: 400, color: C.goldLight, lineHeight: 1 }}>€{minPrice}<span style={{ fontSize: 12, fontWeight: 300 }}>{unitSuffix(prop.asset_type)}</span></div>
                       </div>
                     )}
                   </div>
@@ -862,7 +872,7 @@ export default function LandingPage() {
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 10, color: C.textDim, letterSpacing: "1px", textTransform: "uppercase" }}>da</div>
-                    {(() => { const mp = rooms.reduce((min: number, r: any) => { const pr = getPricing(r.id); const p = pr?.min_price ?? Infinity; return p < min ? p : min; }, Infinity); return mp < Infinity ? <div style={{ fontFamily: FONT, fontSize: 28, color: C.gold }}>€{mp}<span style={{ fontSize: 13, color: C.textMuted }}>/notte</span></div> : null; })()}
+                    {(() => { const mp = rooms.reduce((min: number, r: any) => { const pr = getPricing(r.id); const p = pr?.min_price ?? Infinity; return p < min ? p : min; }, Infinity); return mp < Infinity ? <div style={{ fontFamily: FONT, fontSize: 28, color: C.gold }}>€{mp}<span style={{ fontSize: 13, color: C.textMuted }}>{unitSuffix(prop.asset_type)}</span></div> : null; })()}
                   </div>
                 </div>
 
@@ -893,7 +903,7 @@ export default function LandingPage() {
                               transition: "all 0.2s" }}>
                             <div style={{ fontWeight: 600, color: isSelected ? C.gold : C.text, fontSize: 13 }}>{r.name}</div>
                             <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
-                              {r.capacity} ospiti {pr ? `· €${pr.min_price}/notte` : ""}
+                              {r.capacity} ospiti {pr ? `· €${pr.min_price}${unitSuffix(prop.asset_type)}` : ""}
                             </div>
                             {r.description && <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{r.description}</div>}
                           </div>
@@ -911,13 +921,14 @@ export default function LandingPage() {
                           roomId={detailRoom.id}
                           selectedRange={detailRange}
                           onRangeSelect={(s, e) => setDetailRange({ start: s, end: e })}
+                          assetType={prop.asset_type}
                         />
                         {nights > 0 && (
                           <button style={{ ...btn("gold"), width: "100%", marginTop: 16, padding: "14px" }}
                             onClick={() => {
                               openModal(prop, detailRoom, detailRange.start || undefined, detailRange.end || undefined);
                             }}>
-                            Prenota {nights} {nights === 1 ? "notte" : "notti"} →
+                            Prenota {nights} {unitLabel(prop.asset_type, nights)} →
                           </button>
                         )}
                         {!detailRange.start && (

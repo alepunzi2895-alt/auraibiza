@@ -100,6 +100,15 @@ const ASSET_TYPES = [
 ];
 const assetLabel = (type?: string) => ASSET_TYPES.find(a => a.v === type)?.l || "🏠 Appartamento";
 
+// Auto, scooter e barche si prenotano a giorno (non a notte come ville/appartamenti)
+const isDayBasedAsset = (assetType?: string) => assetType === "car" || assetType === "scooter" || assetType === "boat";
+const unitLabel = (assetType: string | undefined, count: number) => {
+  const day = isDayBasedAsset(assetType);
+  if (day) return count === 1 ? "giorno" : "giorni";
+  return count === 1 ? "notte" : "notti";
+};
+const unitSuffix = (assetType?: string) => isDayBasedAsset(assetType) ? "/giorno" : "/notte";
+
 const ASSET_CATEGORIES = [
   { key: "residenze", label: "Residenze", icon: "🏠", types: ["apartment", "villa"], defaultType: "apartment" },
   { key: "marine", label: "Marine", icon: "⛵", types: ["boat"], defaultType: "boat" },
@@ -138,7 +147,7 @@ interface Booking {
   start_date: string; end_date: string; notes: string; owner_price_total: number;
   concierge_fee: number; total_price: number; status: string; created_at: number;
   guests_count?: number; stay_price_total?: number; cleaning_fee_total?: number;
-  fee_mode?: string; fee_value?: number;
+  fee_mode?: string; fee_value?: number; asset_type?: string;
 }
 
 // --- UTILS ---
@@ -533,13 +542,13 @@ function PdfPreview({ data, onClose }: { data: { booking: Booking; room: Room | 
             <div><span style={{ color: "#999", fontSize: 11, textTransform: "uppercase", letterSpacing: "1px" }}>Ospiti</span><br /><strong>{booking.guests_count || 1} { (booking.guests_count||1) > 1 ? 'persone' : 'persona'}</strong></div>
             <div><span style={{ color: "#999", fontSize: 11, textTransform: "uppercase", letterSpacing: "1px" }}>Check-in</span><br /><strong>{formatDate(booking.start_date)}</strong></div>
             <div><span style={{ color: "#999", fontSize: 11, textTransform: "uppercase", letterSpacing: "1px" }}>Check-out</span><br /><strong>{formatDate(booking.end_date)}</strong></div>
-            <div><span style={{ color: "#999", fontSize: 11, textTransform: "uppercase", letterSpacing: "1px" }}>Notti</span><br /><strong>{getDaysBetween(booking.start_date, booking.end_date)}</strong></div>
+            <div><span style={{ color: "#999", fontSize: 11, textTransform: "uppercase", letterSpacing: "1px" }}>{isDayBasedAsset(booking.asset_type) ? "Giorni" : "Notti"}</span><br /><strong>{getDaysBetween(booking.start_date, booking.end_date)}</strong></div>
             <div><span style={{ color: "#999", fontSize: 11, textTransform: "uppercase", letterSpacing: "1px" }}>Location</span><br /><strong>{property?.location}</strong></div>
           </div>
 
           <div style={{ marginTop: 40, background: "#F9F7F2", padding: 24, borderRadius: 4, border: "1px solid #EEE" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12, fontSize: 15 }}>
-              <span style={{ color: "#666" }}>Soggiorno ({getDaysBetween(booking.start_date, booking.end_date)} notti)</span>
+              <span style={{ color: "#666" }}>Soggiorno ({getDaysBetween(booking.start_date, booking.end_date)} {unitLabel(booking.asset_type, getDaysBetween(booking.start_date, booking.end_date))})</span>
               <span style={{ fontWeight: 600 }}>€{((booking.stay_price_total || 0) + (booking.concierge_fee || 0)) || booking.total_price - (booking.cleaning_fee_total || 0)}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 0, fontSize: 15 }}>
@@ -1038,7 +1047,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                     <div>
                       <label style={label}>Modalità</label>
                       <select style={sel} value={feeMode} onChange={e => setFeeMode(e.target.value as any)}>
-                        <option value="per_night">€/notte</option>
+                        <option value="per_night">{unitSuffix(data.properties.find((p: any) => p.id === currentRoom?.property_id)?.asset_type).replace("/", "€/")}</option>
                         <option value="percentage">%</option>
                       </select>
                     </div>
@@ -1172,7 +1181,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                           </td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>
                             {formatDate(b.start_date)} → {formatDate(b.end_date)}
-                            <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {getDaysBetween(b.start_date, b.end_date) === 1 ? 'notte' : 'notti'})</div>
+                            <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
                           </td>
                           <td style={{ ...td, color: C.textDim }}>—</td>
                           <td style={{ ...td, color: C.textDim }}>—</td>
@@ -1198,7 +1207,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                         </td>
                         <td style={{ ...td, whiteSpace: "nowrap" }}>
                           {formatDate(b.start_date)} → {formatDate(b.end_date)}
-                          <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {getDaysBetween(b.start_date, b.end_date) === 1 ? 'notte' : 'notti'})</div>
+                          <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
                         </td>
                         <td style={{ ...td, fontWeight: 600, color: C.success }}>€{b.owner_price_total}</td>
                         <td style={{ ...td, color: C.gold, fontSize: 10 }}>
@@ -2228,7 +2237,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                       </td>
                       <td style={{ ...td, whiteSpace: "nowrap" }}>
                         {formatDate(b.start_date)} → {formatDate(b.end_date)}
-                        <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {getDaysBetween(b.start_date, b.end_date) === 1 ? 'notte' : 'notti'})</div>
+                        <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
                       </td>
                       <td style={td}>€{b.stay_price_total}</td>
                       <td style={td}>€{b.cleaning_fee_total}</td>
@@ -2891,7 +2900,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 200 }} onClick={() => setEditPricing(null)}>
           <div style={{ ...card, width: 360 }} onClick={e => e.stopPropagation()}>
             <h3 style={h3Style}>Prezzo — {editPricing.month}</h3>
-            <div style={{ marginBottom: 12 }}><label style={label}>Base/notte (€)</label><input style={input} type="number" value={editPricing.basePrice} onChange={e => setEditPricing({ ...editPricing, basePrice: e.target.value })} /></div>
+            <div style={{ marginBottom: 12 }}><label style={label}>Base{unitSuffix(data.properties.find((p: any) => p.id === allRooms.find((r: any) => r.id === editPricing.roomId)?.property_id)?.asset_type)} (€)</label><input style={input} type="number" value={editPricing.basePrice} onChange={e => setEditPricing({ ...editPricing, basePrice: e.target.value })} /></div>
             <div style={{ marginBottom: 16 }}><label style={label}>Pulizia (€)</label><input style={input} type="number" value={editPricing.cleaningFee} onChange={e => setEditPricing({ ...editPricing, cleaningFee: e.target.value })} /></div>
             <div style={{ display: "flex", gap: 8 }}>
               <button style={{ ...btn("gold"), flex: 1 }} onClick={handleSavePricing}>Salva</button>
@@ -2921,7 +2930,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
           <div style={{ ...card, width: 360 }} onClick={e => e.stopPropagation()}>
             <h3 style={h3Style}>Aggiungi Mese al Listino</h3>
             <div style={{ marginBottom: 12 }}><label style={label}>Mese</label><input style={input} type="month" value={addPricing.month} onChange={e => setAddPricing({ ...addPricing, month: e.target.value })} /></div>
-            <div style={{ marginBottom: 12 }}><label style={label}>Base/notte (€)</label><input style={input} type="number" value={addPricing.basePrice} onChange={e => setAddPricing({ ...addPricing, basePrice: e.target.value })} /></div>
+            <div style={{ marginBottom: 12 }}><label style={label}>Base{unitSuffix(data.properties.find((p: any) => p.id === allRooms.find((r: any) => r.id === addPricing.roomId)?.property_id)?.asset_type)} (€)</label><input style={input} type="number" value={addPricing.basePrice} onChange={e => setAddPricing({ ...addPricing, basePrice: e.target.value })} /></div>
             <div style={{ marginBottom: 16 }}><label style={label}>Pulizia (€)</label><input style={input} type="number" value={addPricing.cleaningFee} onChange={e => setAddPricing({ ...addPricing, cleaningFee: e.target.value })} /></div>
             <div style={{ display: "flex", gap: 8 }}>
               <button style={{ ...btn("gold"), flex: 1 }} onClick={handleAddPricingMonth}>Aggiungi</button>
@@ -3010,15 +3019,15 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                   <h4 style={{ ...h3Style, fontSize: 13, marginBottom: 12, color: C.gold }}>Riepilogo Finanziario Live</h4>
                   <div style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: C.textDim }}>Prezzo Base (x notte):</span>
+                      <span style={{ color: C.textDim }}>Prezzo Base (x{unitSuffix(adjModal?.asset_type)}):</span>
                       <strong style={{ color: C.text }}>€{nightlyBase.toFixed(2)}</strong>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: C.textDim }}>Prezzo Finale (x notte):</span>
+                      <span style={{ color: C.textDim }}>Prezzo Finale (x{unitSuffix(adjModal?.asset_type)}):</span>
                       <strong style={{ color: C.gold }}>€{nightlyNew.toFixed(2)}</strong>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${C.border}44`, paddingTop: 8 }}>
-                      <span style={{ color: C.textDim }}>Soggiorno ({days.length} notti):</span>
+                      <span style={{ color: C.textDim }}>Soggiorno ({days.length} {unitLabel(adjModal?.asset_type, days.length)}):</span>
                       <strong style={{ color: C.text }}>€{liveStay.toFixed(2)}</strong>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -3422,7 +3431,7 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
                 <input style={input} value={naConciergeNick} onChange={e => setNaConciergeNick(e.target.value)} placeholder="nickname concierge da collegare a questo asset" />
               </div>
 
-              <h3 style={{ ...h3Style, marginTop: 24 }}>Prezzi per stagione (a notte / giorno)</h3>
+              <h3 style={{ ...h3Style, marginTop: 24 }}>Prezzi per stagione (a{unitSuffix(naAssetType)})</h3>
               <div style={grid(2)}>
                 <div><label style={label}>Bassa stagione (€)</label><input style={input} type="number" value={naPriceLow} onChange={e => setNaPriceLow(e.target.value)} /></div>
                 <div><label style={label}>Media stagione — giu/set (€)</label><input style={input} type="number" value={naPriceMid} onChange={e => setNaPriceMid(e.target.value)} placeholder="default = bassa" /></div>
