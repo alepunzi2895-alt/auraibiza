@@ -316,6 +316,8 @@ export default function LandingPage() {
   const [detailModal, setDetailModal] = useState<any>(null); // property
   const [detailRoom, setDetailRoom] = useState<any>(null);   // room selezionata nel modal
   const [detailRange, setDetailRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const touchStartX = useRef<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralReady, setReferralReady] = useState(false);
@@ -339,6 +341,19 @@ export default function LandingPage() {
     }
     setReferralReady(true);
   }, []);
+
+  // Navigazione lightbox da tastiera (frecce + Escape)
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const images = parseImages(detailModal?.image);
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxIndex(null);
+      else if (e.key === "ArrowRight") setLightboxIndex(i => i === null ? i : (i + 1) % images.length);
+      else if (e.key === "ArrowLeft") setLightboxIndex(i => i === null ? i : (i - 1 + images.length) % images.length);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [lightboxIndex, detailModal]);
 
   // Step 2: fetch listings once referral code is known (pass it to show hidden assets)
   useEffect(() => {
@@ -830,8 +845,9 @@ export default function LandingPage() {
           : 0;
 
         return (
+          <>
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", backdropFilter: "blur(16px)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 500, padding: "24px 16px", overflowY: "auto" }}
-            onClick={() => { setDetailModal(null); setDetailRange({ start: null, end: null }); }}>
+            onClick={() => { setDetailModal(null); setDetailRange({ start: null, end: null }); setLightboxIndex(null); }}>
             <div style={{
               background: `linear-gradient(160deg, ${C.surface} 0%, rgba(10,14,22,0.99) 100%)`,
               border: `1px solid ${C.borderGold}`, borderRadius: 20, width: "100%", maxWidth: 840,
@@ -840,12 +856,13 @@ export default function LandingPage() {
 
               {/* Cover image */}
               {images.length > 0 && (
-                <div style={{ height: 280, borderRadius: "20px 20px 0 0", overflow: "hidden", position: "relative" }}>
+                <div style={{ height: 280, borderRadius: "20px 20px 0 0", overflow: "hidden", position: "relative", cursor: "zoom-in" }} onClick={() => setLightboxIndex(0)}>
                   <img src={images[0]} alt={prop.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,14,22,0.7) 0%, transparent 60%)" }} />
-                  <button onClick={() => { setDetailModal(null); setDetailRange({ start: null, end: null }); }}
+                  <button onClick={(e) => { e.stopPropagation(); setDetailModal(null); setDetailRange({ start: null, end: null }); }}
                     style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
                   {prop.is_public === 0 && <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(200,169,110,0.2)", border: "1px solid rgba(200,169,110,0.5)", borderRadius: 20, padding: "4px 14px", fontSize: 11, color: C.goldLight, fontWeight: 700 }}>🔒 Esclusivo</div>}
+                  {images.length > 1 && <div style={{ position: "absolute", bottom: 12, right: 16, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 11, padding: "3px 10px", borderRadius: 20 }}>🔍 {images.length} foto</div>}
                 </div>
               )}
 
@@ -882,7 +899,7 @@ export default function LandingPage() {
                 {images.length > 1 && (
                   <div style={{ display: "flex", gap: 8, marginBottom: 24, overflowX: "auto" }}>
                     {images.map((img, i) => (
-                      <img key={i} src={img} alt="" style={{ height: 64, width: 96, objectFit: "cover", borderRadius: 8, flexShrink: 0, border: `1px solid ${C.border}` }} />
+                      <img key={i} src={img} alt="" onClick={() => setLightboxIndex(i)} style={{ height: 64, width: 96, objectFit: "cover", borderRadius: 8, flexShrink: 0, border: `1px solid ${C.border}`, cursor: "zoom-in" }} />
                     ))}
                   </div>
                 )}
@@ -962,6 +979,43 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
+
+          {/* Lightbox foto: scorrimento e ingrandimento */}
+          {lightboxIndex !== null && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.95)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center" }}
+              onClick={() => setLightboxIndex(null)}
+              onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+              onTouchEnd={(e) => {
+                if (touchStartX.current === null) return;
+                const dx = e.changedTouches[0].clientX - touchStartX.current;
+                touchStartX.current = null;
+                if (Math.abs(dx) < 40 || images.length < 2) return;
+                setLightboxIndex(i => i === null ? i : dx < 0 ? (i + 1) % images.length : (i - 1 + images.length) % images.length);
+              }}>
+              <button onClick={(e) => { e.stopPropagation(); setLightboxIndex(null); }}
+                style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: "50%", width: 44, height: 44, cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>✕</button>
+
+              {images.length > 1 && (
+                <button onClick={(e) => { e.stopPropagation(); setLightboxIndex(i => i === null ? i : (i - 1 + images.length) % images.length); }}
+                  style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: "50%", width: 48, height: 48, cursor: "pointer", fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>‹</button>
+              )}
+
+              <img src={images[lightboxIndex]} alt="" onClick={(e) => e.stopPropagation()}
+                style={{ maxWidth: "92vw", maxHeight: "88vh", objectFit: "contain", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }} />
+
+              {images.length > 1 && (
+                <button onClick={(e) => { e.stopPropagation(); setLightboxIndex(i => i === null ? i : (i + 1) % images.length); }}
+                  style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: "50%", width: 48, height: 48, cursor: "pointer", fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>›</button>
+              )}
+
+              {images.length > 1 && (
+                <div style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 12, padding: "5px 14px", borderRadius: 20 }}>
+                  {lightboxIndex + 1} / {images.length}
+                </div>
+              )}
+            </div>
+          )}
+          </>
         );
       })()}
 
