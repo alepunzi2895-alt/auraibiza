@@ -18,18 +18,32 @@ function loadEnvLocal() {
 loadEnvLocal();
 const db = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
 
-const BASE = path.join(os.homedir(), 'Downloads', 'files');
+const DOWNLOADS = path.join(os.homedir(), 'Downloads');
 
+// folder name -> [absolute dir, DB property name]
 const FOLDER_TO_DBNAME = {
-  'CAN JULIA': 'Can Julia',
-  'CAN LIMA': 'Can Lima',
-  'CAN RIERA': 'Can Riera',
-  'VILLA BONIT': 'Villa Bonit',
-  'VILLA LUX': 'Villa Lux',
-  'VILLA PERLA': 'Villa Perla',
-  'VILLA ROCA': 'Villa Roca',
-  'VILLA ROCK': 'Villa Rock',
-  'VILLA TORRE': 'Villa Torre',
+  'CAN JULIA': [path.join(DOWNLOADS, 'files', 'CAN JULIA'), 'Can Julia'],
+  'CAN LIMA': [path.join(DOWNLOADS, 'files', 'CAN LIMA'), 'Can Lima'],
+  'CAN RIERA': [path.join(DOWNLOADS, 'files', 'CAN RIERA'), 'Can Riera'],
+  'VILLA BONIT': [path.join(DOWNLOADS, 'files', 'VILLA BONIT'), 'Villa Bonit'],
+  'VILLA LUX': [path.join(DOWNLOADS, 'files', 'VILLA LUX'), 'Villa Lux'],
+  'VILLA PERLA': [path.join(DOWNLOADS, 'files', 'VILLA PERLA'), 'Villa Perla'],
+  'VILLA ROCA': [path.join(DOWNLOADS, 'files', 'VILLA ROCA'), 'Villa Roca'],
+  'VILLA ROCK': [path.join(DOWNLOADS, 'files', 'VILLA ROCK'), 'Villa Rock'],
+  'VILLA TORRE': [path.join(DOWNLOADS, 'files', 'VILLA TORRE'), 'Villa Torre'],
+  'CAN DANIEL': [path.join(DOWNLOADS, 'CAN DANIEL'), 'Villa Can Daniel'],
+  'CAN ESMERALDA': [path.join(DOWNLOADS, 'CAN ESMERALDA'), 'Can Esmeralda'],
+  'CAN PAZ': [path.join(DOWNLOADS, 'CAN PAZ'), 'Can Paz'],
+  'CAN ROMERO': [path.join(DOWNLOADS, 'CAN ROMERO'), 'Can Romero'],
+  'VILLA CORA': [path.join(DOWNLOADS, 'VILLA CORA'), 'Villa Cora'],
+  'VILLA FLORA': [path.join(DOWNLOADS, 'VILLA FLORA'), 'Villa Flora'],
+  'VILLA JULIETA': [path.join(DOWNLOADS, 'VILLA JULIETA'), 'Villa Julieta'],
+  'VILLA MAR': [path.join(DOWNLOADS, 'VILLA MAR'), 'Villa Mar'],
+  'VILLA MARTINET': [path.join(DOWNLOADS, 'VILLA MARTINET'), 'Villa Wave (già Villa Martinet)'],
+  'VILLA MOLI': [path.join(DOWNLOADS, 'VILLA MOLI'), 'Villa Moli'],
+  'VILLA NEUTRA': [path.join(DOWNLOADS, 'VILLA NEUTRA'), 'Villa Neutra'],
+  'VILLA OCEAN': [path.join(DOWNLOADS, 'VILLA OCEAN'), 'Villa Ocean'],
+  'VILLA TARIS': [path.join(DOWNLOADS, 'VILLA TARIS'), 'Villa Taris'],
 };
 
 function parsePPM(buf) {
@@ -73,11 +87,15 @@ async function processFile(filePath) {
   // trim solid-color borders left over from PDF-page rendering (black/white bars)
   const trimmed = pipeline.trim({ threshold: 15 });
   const stats = await trimmed.clone().stats();
-  const [r, g, b] = stats.channels;
+  const r = stats.channels[0];
+  const g = stats.channels[1] || r;
+  const b = stats.channels[2] || r;
   const meanAll = (r.mean + g.mean + b.mean) / 3;
   const spread = Math.max(r.mean, g.mean, b.mean) - Math.min(r.mean, g.mean, b.mean);
-  // likely a text page / floor plan / blank cover: near-white or near-flat-gray, low color spread
-  const looksBlank = meanAll > 235 && spread < 12;
+  const maxStdev = Math.max(r.stdev, g.stdev, b.stdev);
+  // likely a text page / floor plan / blank cover / solid brand-color slide:
+  // near-white-or-flat-gray page, OR near-uniform single color (low stdev regardless of hue)
+  const looksBlank = (meanAll > 235 && spread < 12) || maxStdev < 12;
   const buffer = await trimmed.resize({ width: 1600, withoutEnlargement: true }).jpeg({ quality: 72 }).toBuffer();
   const heroScore = (b.mean - r.mean) + spread * 0.5; // favor blue (sea/pool) + vividness
   return { buffer, looksBlank, heroScore };
@@ -85,9 +103,9 @@ async function processFile(filePath) {
 
 async function main() {
   const only = process.argv[2]; // optional: run a single folder for testing
-  for (const [folder, dbName] of Object.entries(FOLDER_TO_DBNAME)) {
+  for (const [folder, [dir, dbName]] of Object.entries(FOLDER_TO_DBNAME)) {
     if (only && folder !== only) continue;
-    const dir = path.join(BASE, folder);
+    if (!fs.existsSync(dir)) { console.log(`\n=== ${folder}: directory not found, skipping (${dir}) ===`); continue; }
     const files = fs.readdirSync(dir).filter((f) => /\.(jpg|jpeg|png|ppm)$/i.test(f)).sort(naturalSort);
     console.log(`\n=== ${folder} -> "${dbName}" (${files.length} files) ===`);
     const results = [];

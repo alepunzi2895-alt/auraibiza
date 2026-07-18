@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, CSSProperties } from "react";
 import "leaflet/dist/leaflet.css";
-import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf } from "./actions";
+import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf, getPropertyGallery } from "./actions";
 
 // ─── Design tokens (standalone, no import from platform) ─────────────────────
 const C = {
@@ -318,6 +318,9 @@ export default function LandingPage() {
   const [detailRange, setDetailRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const touchStartX = useRef<number | null>(null);
+  // Galleria completa dell'asset aperto nel modal, caricata on-demand (la lista pubblica
+  // porta solo la cover per non scaricare tutte le foto di tutti gli asset ad ogni visita)
+  const [detailGallery, setDetailGallery] = useState<string[] | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralReady, setReferralReady] = useState(false);
@@ -342,10 +345,19 @@ export default function LandingPage() {
     setReferralReady(true);
   }, []);
 
+  // Carica la galleria completa dell'asset solo quando si apre il suo dettaglio
+  useEffect(() => {
+    if (!detailModal) { setDetailGallery(null); return; }
+    setDetailGallery(parseImages(detailModal.image)); // intanto mostra la cover già in memoria
+    getPropertyGallery(detailModal.id).then(res => {
+      if (res.image) setDetailGallery(parseImages(res.image));
+    });
+  }, [detailModal?.id]);
+
   // Navigazione lightbox da tastiera (frecce + Escape)
   useEffect(() => {
     if (lightboxIndex === null) return;
-    const images = parseImages(detailModal?.image);
+    const images = detailGallery || parseImages(detailModal?.image);
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") setLightboxIndex(null);
       else if (e.key === "ArrowRight") setLightboxIndex(i => i === null ? i : (i + 1) % images.length);
@@ -353,7 +365,7 @@ export default function LandingPage() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [lightboxIndex, detailModal]);
+  }, [lightboxIndex, detailModal, detailGallery]);
 
   // Step 2: fetch listings once referral code is known (pass it to show hidden assets)
   useEffect(() => {
@@ -835,7 +847,7 @@ export default function LandingPage() {
       {detailModal && (() => {
         const prop = detailModal;
         const rooms = getRoomsForProperty(prop.id);
-        const images = parseImages(prop.image);
+        const images = detailGallery || parseImages(prop.image);
         const managedAvail = !!prop.manages_availability;
         const waText = encodeURIComponent(`Ciao! Sono interessato/a a *${prop.name}*${detailRoom ? ` — *${detailRoom.name}*` : ""}.\n\nPotreste indicarmi la disponibilità? Sto cercando queste date: `);
         const waUrl = `https://wa.me/${WA_NUMBER}?text=${waText}`;

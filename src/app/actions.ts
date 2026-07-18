@@ -21,14 +21,18 @@ export async function resetDatabase() {
     await db.execute("DROP TABLE IF EXISTS payments");
     await db.execute("DROP TABLE IF EXISTS user_payment_methods");
     await db.execute("DROP TABLE IF EXISTS commission_rules");
+    dbReady = false;
     return await initDatabase();
   } catch (error) {
     return { success: false, error: String(error) };
   }
 }
 
+let dbReady = false;
+
 export async function initDatabase() {
   try {
+    if (dbReady) return { success: true };
     await db.batch([
       `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, nickname TEXT UNIQUE NOT NULL, role TEXT NOT NULL, password TEXT, status TEXT DEFAULT 'active', managed_by TEXT, created_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS properties (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, name TEXT NOT NULL, location TEXT NOT NULL, description TEXT, image TEXT, asset_type TEXT DEFAULT 'apartment')`,
@@ -84,6 +88,7 @@ export async function initDatabase() {
       "ALTER TABLE properties ADD COLUMN longitude REAL",
       "ALTER TABLE properties ADD COLUMN pdf_document TEXT",
       "ALTER TABLE properties ADD COLUMN pdf_name TEXT",
+      "ALTER TABLE properties ADD COLUMN cover_image TEXT",
     ];
     for (const sql of migrations) {
       try { await db.execute(sql); } catch (_e) {}
@@ -122,6 +127,7 @@ export async function initDatabase() {
       await db.batch(detailBatch, "write");
     }
 
+    dbReady = true;
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -457,7 +463,7 @@ export async function updatePropertyImage(id: string, base64: string) {
       try { images = current.startsWith('[') ? JSON.parse(current) : [current]; } catch (_e) { images = [current]; }
     }
     images.push(base64);
-    await db.execute({ sql: "UPDATE properties SET image = ? WHERE id = ?", args: [JSON.stringify(images), id] });
+    await db.execute({ sql: "UPDATE properties SET image = ?, cover_image = ? WHERE id = ?", args: [JSON.stringify(images), images[0], id] });
     revalidatePath("/");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
@@ -472,7 +478,7 @@ export async function removePropertyImage(id: string, index: number) {
       try { images = current.startsWith('[') ? JSON.parse(current) : [current]; } catch (_e) { images = [current]; }
     }
     images.splice(index, 1);
-    await db.execute({ sql: "UPDATE properties SET image = ? WHERE id = ?", args: [images.length > 0 ? JSON.stringify(images) : null, id] });
+    await db.execute({ sql: "UPDATE properties SET image = ?, cover_image = ? WHERE id = ?", args: [images.length > 0 ? JSON.stringify(images) : null, images[0] || null, id] });
     revalidatePath("/");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
@@ -851,11 +857,15 @@ export async function getPublicListings(referralCode?: string) {
       const refUser = await db.execute({ sql: "SELECT id FROM users WHERE nickname = ? AND status = 'active'", args: [referralCode.toLowerCase().trim()] });
       showAll = refUser.rows.length > 0;
     }
+    // Solo la cover (prima foto, colonna dedicata cover_image) va nella lista pubblica: la
+    // galleria completa si carica on-demand via getPropertyGallery quando l'utente apre il
+    // dettaglio di un asset. Usare una colonna dedicata invece di json_extract(image, '$[0]')
+    // evita che il DB debba parsare l'intero blob JSON (anche multi-MB) solo per estrarne il primo elemento.
     const propertiesSQL = showAll
-      ? "SELECT id, name, location, description, image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties ORDER BY name ASC"
-      : "SELECT id, name, location, description, image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
+      ? "SELECT id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties ORDER BY name ASC"
+      : "SELECT id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
     const properties = await db.execute(propertiesSQL);
-    const rooms = await db.execute("SELECT id, property_id, name, capacity, image, description FROM rooms ORDER BY name ASC");
+    const rooms = await db.execute("SELECT id, property_id, name, capacity, description FROM rooms ORDER BY name ASC");
     const pricing = await db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id");
     return {
       properties: properties.rows,
@@ -865,6 +875,15 @@ export async function getPublicListings(referralCode?: string) {
     };
   } catch (error) {
     return { properties: [], rooms: [], pricing: [], referralValid: false, error: String(error) };
+  }
+}
+
+export async function getPropertyGallery(propertyId: string) {
+  try {
+    const res = await db.execute({ sql: "SELECT image FROM properties WHERE id = ?", args: [propertyId] });
+    return { image: (res.rows[0] as any)?.image as string | undefined };
+  } catch (error) {
+    return { image: undefined, error: String(error) };
   }
 }
 
