@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef, CSSProperties } from "react";
 import "leaflet/dist/leaflet.css";
 import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf, getPropertyGallery } from "./actions";
+import { LANGUAGES, Lang, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, assetTypeLabel, localizedDescription } from "@/lib/i18n";
 
 // ─── Design tokens (standalone, no import from platform) ─────────────────────
 const C = {
@@ -17,24 +18,15 @@ const FONT  = `'Cormorant Garamond', Georgia, serif`;
 const FONT_B = `'DM Sans', 'Helvetica Neue', sans-serif`;
 
 const ASSET_CATS = [
-  { key: "all",       icon: "✦",  label: "Tutto",      types: [] },
-  { key: "residenze", icon: "🏠", label: "Residenze",  types: ["apartment","villa"] },
-  { key: "marine",    icon: "⛵", label: "Marine",     types: ["boat"] },
-  { key: "mobilita",  icon: "🚗", label: "Mobilità",   types: ["car","scooter"] },
+  { key: "all",       icon: "✦",  labelKey: "cat_all",       types: [] },
+  { key: "residenze", icon: "🏠", labelKey: "cat_residenze", types: ["apartment","villa"] },
+  { key: "marine",    icon: "⛵", labelKey: "cat_marine",    types: ["boat"] },
+  { key: "mobilita",  icon: "🚗", labelKey: "cat_mobilita",  types: ["car","scooter"] },
 ];
 
 const assetIcon: Record<string, string> = {
   apartment:"🏠", villa:"🏡", boat:"⛵", car:"🚗", scooter:"🛵",
 };
-
-// Auto, scooter e barche si prenotano a giorno (non a notte come ville/appartamenti)
-const isDayBasedAsset = (assetType?: string) => assetType === "car" || assetType === "scooter" || assetType === "boat";
-const unitLabel = (assetType: string | undefined, count: number) => {
-  const day = isDayBasedAsset(assetType);
-  if (day) return count === 1 ? "giorno" : "giorni";
-  return count === 1 ? "notte" : "notti";
-};
-const unitSuffix = (assetType?: string) => isDayBasedAsset(assetType) ? "/giorno" : "/notte";
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
 const parseImages = (raw?: string): string[] => {
@@ -69,12 +61,12 @@ const labelStyle: CSSProperties = {
 };
 
 const WA_NUMBER = "34645265430";
-const MONTH_NAMES = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 
 // ─── Public Calendar ─────────────────────────────────────────────────────────
-function PublicCalendar({ roomId, onRangeSelect, selectedRange, assetType }: {
+function PublicCalendar({ roomId, onRangeSelect, selectedRange, assetType, lang }: {
   roomId: string;
   onRangeSelect: (start: string | null, end: string | null) => void;
+  lang: Lang;
   selectedRange: { start: string | null; end: string | null };
   assetType?: string;
 }) {
@@ -144,15 +136,15 @@ function PublicCalendar({ roomId, onRangeSelect, selectedRange, assetType }: {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <button onClick={() => { const [y,m] = ym.split("-").map(Number); setYm(m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,"0")}`); }}
           style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: "6px 12px", fontSize: 14 }}>◂</button>
-        <div style={{ fontFamily: FONT, fontSize: 18, color: C.goldLight }}>{MONTH_NAMES[month - 1]} {year}</div>
+        <div style={{ fontFamily: FONT, fontSize: 18, color: C.goldLight }}>{monthNames(lang)[month - 1]} {year}</div>
         <button onClick={() => { const [y,m] = ym.split("-").map(Number); setYm(m===12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,"0")}`); }}
           style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: "6px 12px", fontSize: 14 }}>▸</button>
       </div>
       {loading ? (
-        <div style={{ textAlign: "center", padding: 24, color: C.textDim, fontSize: 12 }}>Caricamento...</div>
+        <div style={{ textAlign: "center", padding: 24, color: C.textDim, fontSize: 12 }}>{t(lang, "cal_loading")}</div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
-          {["Lu","Ma","Me","Gi","Ve","Sa","Do"].map(d => (
+          {dayAbbrevs(lang).map(d => (
             <div key={d} style={{ textAlign: "center", fontSize: 10, color: C.textDim, padding: "4px 0", fontWeight: 600 }}>{d}</div>
           ))}
           {Array.from({ length: offset }).map((_, i) => <div key={`e${i}`} />)}
@@ -198,13 +190,13 @@ function PublicCalendar({ roomId, onRangeSelect, selectedRange, assetType }: {
         </div>
       )}
       <div style={{ display: "flex", gap: 16, marginTop: 14, fontSize: 10, color: C.textDim, flexWrap: "wrap", justifyContent: "center" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(61,158,106,0.3)", display: "inline-block" }} />Disponibile</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(180,68,68,0.3)", display: "inline-block" }} />Occupato</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: C.gold, display: "inline-block" }} />Selezionato</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(61,158,106,0.3)", display: "inline-block" }} />{t(lang, "cal_available")}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(180,68,68,0.3)", display: "inline-block" }} />{t(lang, "cal_booked")}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: C.gold, display: "inline-block" }} />{t(lang, "cal_selected")}</span>
       </div>
       {nights > 0 && (
         <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: C.gold, fontFamily: FONT }}>
-          {nights} {unitLabel(assetType, nights)} selezionate
+          {t(lang, "cal_nights_selected", { n: nights, unit: unitLabel(lang, assetType, nights) })}
         </div>
       )}
     </div>
@@ -214,11 +206,12 @@ function PublicCalendar({ roomId, onRangeSelect, selectedRange, assetType }: {
 // ─── Property Map View ─────────────────────────────────────────────────────────
 const IBIZA_CENTER: [number, number] = [38.9067, 1.4206];
 
-function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect }: {
+function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect, lang }: {
   properties: any[];
   getRoomsForProperty: (id: string) => any[];
   getPricing: (roomId: string) => any;
   onSelect: (prop: any) => void;
+  lang: Lang;
 }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
@@ -266,8 +259,8 @@ function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect
             ${cover ? `<img src="${cover}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;" />` : ""}
             <div style="font-family:${FONT};font-size:16px;color:${C.goldLight};margin-bottom:4px;">${prop.name}</div>
             <div style="font-size:11px;color:${C.textMuted};margin-bottom:6px;">📍 ${prop.location}</div>
-            ${minPrice < Infinity ? `<div style="font-size:12px;color:${C.gold};margin-bottom:8px;">da €${minPrice}${unitSuffix(prop.asset_type)}</div>` : ""}
-            <button id="${popupId}" style="width:100%;padding:8px;border:none;border-radius:6px;background:linear-gradient(135deg, ${C.goldDark}, ${C.gold});color:#080B0F;font-weight:600;font-size:11px;cursor:pointer;">Vedi dettagli →</button>
+            ${minPrice < Infinity ? `<div style="font-size:12px;color:${C.gold};margin-bottom:8px;">${t(lang, "from_price")} €${minPrice}${unitSuffix(lang, prop.asset_type)}</div>` : ""}
+            <button id="${popupId}" style="width:100%;padding:8px;border:none;border-radius:6px;background:linear-gradient(135deg, ${C.goldDark}, ${C.gold});color:#080B0F;font-weight:600;font-size:11px;cursor:pointer;">${t(lang, "map_view_details")}</button>
           </div>
         `;
         const marker = L.marker([lat, lng], { icon }).addTo(markersLayer.current);
@@ -284,7 +277,7 @@ function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect
       }
     });
     return () => { cancelled = true; };
-  }, [geoProperties, getRoomsForProperty, getPricing, onSelect]);
+  }, [geoProperties, getRoomsForProperty, getPricing, onSelect, lang]);
 
   useEffect(() => {
     return () => {
@@ -306,6 +299,14 @@ function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function LandingPage() {
+  const [lang, setLang] = useState<Lang>(DEFAULT_LANG);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem("aura_lang") as Lang | null;
+    if (stored && LANGUAGES.some(l => l.code === stored)) setLang(stored);
+  }, []);
+  const changeLang = (l: Lang) => { setLang(l); localStorage.setItem("aura_lang", l); setLangMenuOpen(false); };
+
   const [listings, setListings] = useState<any>({ properties: [], rooms: [], pricing: [], referralValid: false });
   const [activeCat, setActiveCat] = useState("all");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
@@ -386,8 +387,8 @@ export default function LandingPage() {
     listings.pricing.find((p: any) => p.room_id === roomId);
 
   const handleRequest = async () => {
-    if (!form.name.trim()) { setFormErr("Inserisci il tuo nome."); return; }
-    if (!form.email.trim() && !form.phone.trim()) { setFormErr("Inserisci email o telefono."); return; }
+    if (!form.name.trim()) { setFormErr(t(lang, "req_err_name")); return; }
+    if (!form.email.trim() && !form.phone.trim()) { setFormErr(t(lang, "req_err_contact")); return; }
     setSending(true); setFormErr("");
     const res = await createBookingRequest({
       propertyId: modal?.property?.id,
@@ -399,7 +400,7 @@ export default function LandingPage() {
     });
     setSending(false);
     if (res.success) { setSent(true); }
-    else { setFormErr("Errore nell'invio. Riprova."); }
+    else { setFormErr(t(lang, "req_err_send")); }
   };
 
   const openModal = (property: any, room: any, checkIn?: string, checkOut?: string) => {
@@ -443,9 +444,39 @@ export default function LandingPage() {
           </div>
         </div>
         <nav style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <a href="#services" style={{ color: C.textMuted, textDecoration: "none", fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", padding: "6px 12px" }} className="hide-mobile">Servizi</a>
-          <a href="#how" style={{ color: C.textMuted, textDecoration: "none", fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", padding: "6px 12px" }} className="hide-mobile">Come funziona</a>
-          <a href="#collaborate" style={{ color: C.textMuted, textDecoration: "none", fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", padding: "6px 12px" }} className="hide-mobile">Collabora</a>
+          <a href="#services" style={{ color: C.textMuted, textDecoration: "none", fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", padding: "6px 12px" }} className="hide-mobile">{t(lang, "nav_services")}</a>
+          <a href="#how" style={{ color: C.textMuted, textDecoration: "none", fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", padding: "6px 12px" }} className="hide-mobile">{t(lang, "nav_how")}</a>
+          <a href="#collaborate" style={{ color: C.textMuted, textDecoration: "none", fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", padding: "6px 12px" }} className="hide-mobile">{t(lang, "nav_collaborate")}</a>
+          <div style={{ position: "relative" }}>
+            <button onClick={() => setLangMenuOpen(v => !v)} style={{
+              display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.04)",
+              border: `1px solid ${C.border}`, borderRadius: 20, padding: "6px 12px", cursor: "pointer",
+              color: C.textMuted, fontSize: 13,
+            }}>
+              <span>{LANGUAGES.find(l => l.code === lang)?.flag}</span>
+              <span style={{ fontSize: 9 }}>▾</span>
+            </button>
+            {langMenuOpen && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 1 }} onClick={() => setLangMenuOpen(false)} />
+                <div style={{
+                  position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 2,
+                  background: C.surface, border: `1px solid ${C.borderGold}`, borderRadius: 10,
+                  boxShadow: "0 12px 32px rgba(0,0,0,0.5)", overflow: "hidden", minWidth: 150,
+                }}>
+                  {LANGUAGES.map(l => (
+                    <div key={l.code} onClick={() => changeLang(l.code)} style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", cursor: "pointer",
+                      background: l.code === lang ? C.goldGlow : "transparent",
+                      color: l.code === lang ? C.gold : C.text, fontSize: 12,
+                    }}>
+                      <span style={{ fontSize: 16 }}>{l.flag}</span><span>{l.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </nav>
       </header>
 
@@ -461,7 +492,7 @@ export default function LandingPage() {
         }}>
           <span style={{ fontSize: 14 }}>✨</span>
           <span style={{ fontSize: 12, color: C.goldLight, fontFamily: FONT_B, letterSpacing: "0.5px" }}>
-            Stai esplorando il portfolio esclusivo di <strong style={{ color: C.gold }}>{referralCode}</strong> — inclusi gli asset riservati non visibili al pubblico
+            {(() => { const [pre, post] = t(lang, "referral_banner").split("{name}"); return <>{pre}<strong style={{ color: C.gold }}>{referralCode}</strong>{post}</>; })()}
           </span>
           <span style={{ fontSize: 14 }}>✨</span>
         </div>
@@ -536,23 +567,24 @@ export default function LandingPage() {
         </div>
 
         <div style={{ fontSize: 10, color: C.gold, letterSpacing: "8px", textTransform: "uppercase", marginBottom: 28, animation: "pulse 3s ease infinite" }}>
-          Ibiza · Luxury Experience
+          {t(lang, "hero_kicker")}
         </div>
 
         <h1 className="hero-text hero-title" style={{
           fontFamily: FONT, fontSize: 68, fontWeight: 300, color: C.goldLight,
           letterSpacing: "3px", lineHeight: 1.1, marginBottom: 24, maxWidth: 800,
+          whiteSpace: "pre-line",
         }}>
-          L'isola come<br />non l'hai mai vissuta
+          {t(lang, "hero_title")}
         </h1>
 
         <p className="hero-sub" style={{ fontSize: 16, color: C.textMuted, maxWidth: 560, lineHeight: 1.8, marginBottom: 48 }}>
-          Ville esclusive, yacht privati, auto di lusso e esperienze su misura. Il tuo concierge personale per un soggiorno indimenticabile a Ibiza.
+          {t(lang, "hero_subtitle")}
         </p>
 
         <div className="hero-cta" style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
-          <a href="#services" style={{ ...btn("gold"), textDecoration: "none", padding: "14px 36px", fontSize: 13 }}>Scopri i Servizi</a>
-          <a href="#collaborate" style={{ ...btn("outline"), textDecoration: "none", padding: "14px 36px", fontSize: 13 }}>Collabora con Noi</a>
+          <a href="#services" style={{ ...btn("gold"), textDecoration: "none", padding: "14px 36px", fontSize: 13 }}>{t(lang, "hero_cta1")}</a>
+          <a href="#collaborate" style={{ ...btn("outline"), textDecoration: "none", padding: "14px 36px", fontSize: 13 }}>{t(lang, "hero_cta2")}</a>
         </div>
 
       </section>
@@ -560,9 +592,9 @@ export default function LandingPage() {
       {/* ── SERVICES ───────────────────────────────────────────────────────── */}
       <section id="services" style={{ padding: "100px 32px", maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 60 }}>
-          <div style={{ fontSize: 10, color: C.gold, letterSpacing: "4px", textTransform: "uppercase", marginBottom: 16 }}>Il Nostro Portfolio</div>
-          <h2 style={{ fontFamily: FONT, fontSize: 48, fontWeight: 300, color: C.goldLight, letterSpacing: "2px", marginBottom: 16 }}>Esperienze di Lusso</h2>
-          <p style={{ color: C.textMuted, fontSize: 15, maxWidth: 500, margin: "0 auto", lineHeight: 1.7 }}>Ogni proprietà è selezionata per garantire il massimo comfort e l'esclusività che meriti.</p>
+          <div style={{ fontSize: 10, color: C.gold, letterSpacing: "4px", textTransform: "uppercase", marginBottom: 16 }}>{t(lang, "services_kicker")}</div>
+          <h2 style={{ fontFamily: FONT, fontSize: 48, fontWeight: 300, color: C.goldLight, letterSpacing: "2px", marginBottom: 16 }}>{t(lang, "services_title")}</h2>
+          <p style={{ color: C.textMuted, fontSize: 15, maxWidth: 500, margin: "0 auto", lineHeight: 1.7 }}>{t(lang, "services_subtitle")}</p>
         </div>
 
         {/* Category tabs */}
@@ -582,7 +614,7 @@ export default function LandingPage() {
                 transition: "all 0.2s",
               }}>
                 <span>{cat.icon}</span>
-                <span style={{ textTransform: "uppercase", letterSpacing: "1px" }}>{cat.label}</span>
+                <span style={{ textTransform: "uppercase", letterSpacing: "1px" }}>{t(lang, cat.labelKey)}</span>
                 {count > 0 && <span style={{ background: active ? C.gold : C.textDim, color: active ? C.bg : C.textMuted, borderRadius: 20, padding: "1px 8px", fontSize: 10, fontWeight: 700 }}>{count}</span>}
               </button>
             );
@@ -591,7 +623,7 @@ export default function LandingPage() {
 
         {/* View toggle: grid / map */}
         <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 32 }}>
-          {([{ key: "grid", icon: "🔲", label: "Griglia" }, { key: "map", icon: "🗺", label: "Mappa" }] as const).map(v => {
+          {([{ key: "grid", icon: "🔲", label: t(lang, "view_grid") }, { key: "map", icon: "🗺", label: t(lang, "view_map") }] as const).map(v => {
             const active = viewMode === v.key;
             return (
               <button key={v.key} onClick={() => setViewMode(v.key)} style={{
@@ -611,13 +643,14 @@ export default function LandingPage() {
         {/* Property cards */}
         {filteredProperties.length === 0 ? (
           <div style={{ textAlign: "center", color: C.textDim, padding: "80px 0", fontSize: 15 }}>
-            Nessun servizio disponibile in questa categoria al momento.
+            {t(lang, "no_results")}
           </div>
         ) : viewMode === "map" ? (
           <PropertyMapView
             properties={filteredProperties}
             getRoomsForProperty={getRoomsForProperty}
             getPricing={getPricing}
+            lang={lang}
             onSelect={(prop) => {
               setDetailModal(prop);
               setDetailRoom(getRoomsForProperty(prop.id)[0] || null);
@@ -659,23 +692,23 @@ export default function LandingPage() {
                     <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,11,15,0.8) 0%, transparent 50%)" }} />
                     <div style={{ position: "absolute", top: 14, left: 14, display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <div style={{ background: "rgba(8,11,15,0.75)", backdropFilter: "blur(8px)", border: `1px solid ${C.borderGold}`, borderRadius: 20, padding: "4px 12px", fontSize: 10, color: C.gold, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase" }}>
-                        {assetIcon[prop.asset_type]} {prop.asset_type}
+                        {assetIcon[prop.asset_type]} {assetTypeLabel(lang, prop.asset_type)}
                       </div>
                       {prop.is_public === 0 && (
                         <div style={{ background: "rgba(200,169,110,0.15)", backdropFilter: "blur(8px)", border: `1px solid rgba(200,169,110,0.4)`, borderRadius: 20, padding: "4px 12px", fontSize: 10, color: C.goldLight, fontWeight: 700, letterSpacing: "1px" }}>
-                          🔒 Esclusivo
+                          🔒 {t(lang, "badge_exclusive")}
                         </div>
                       )}
                       {prop.manages_availability ? (
                         <div style={{ background: "rgba(61,158,106,0.2)", backdropFilter: "blur(8px)", border: "1px solid rgba(61,158,106,0.4)", borderRadius: 20, padding: "4px 12px", fontSize: 10, color: "#5DD09A", fontWeight: 600, letterSpacing: "1px" }}>
-                          📅 Disponibilità live
+                          📅 {t(lang, "badge_live_availability")}
                         </div>
                       ) : null}
                     </div>
                     {minPrice < Infinity && (
                       <div style={{ position: "absolute", bottom: 14, right: 14, textAlign: "right" }}>
-                        <div style={{ fontSize: 9, color: C.textMuted, letterSpacing: "1px", textTransform: "uppercase" }}>da</div>
-                        <div style={{ fontFamily: FONT, fontSize: 26, fontWeight: 400, color: C.goldLight, lineHeight: 1 }}>€{minPrice}<span style={{ fontSize: 12, fontWeight: 300 }}>{unitSuffix(prop.asset_type)}</span></div>
+                        <div style={{ fontSize: 9, color: C.textMuted, letterSpacing: "1px", textTransform: "uppercase" }}>{t(lang, "from_price")}</div>
+                        <div style={{ fontFamily: FONT, fontSize: 26, fontWeight: 400, color: C.goldLight, lineHeight: 1 }}>€{minPrice}<span style={{ fontSize: 12, fontWeight: 300 }}>{unitSuffix(lang, prop.asset_type)}</span></div>
                       </div>
                     )}
                   </div>
@@ -686,18 +719,18 @@ export default function LandingPage() {
                     <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
                       <span>📍</span> {prop.location}
                     </div>
-                    {prop.description && (
+                    {localizedDescription(prop, lang) && (
                       <p style={{ fontSize: 12, color: C.textDim, lineHeight: 1.7, marginBottom: 16, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as any}>
-                        {prop.description}
+                        {localizedDescription(prop, lang)}
                       </p>
                     )}
                     <div style={{ fontSize: 11, color: C.textMuted, display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                      <span>{rooms.length} {rooms.length === 1 ? "unità" : "unità disponibili"}</span>
+                      <span>{rooms.length} {rooms.length === 1 ? t(lang, "unit_one") : t(lang, "unit_other")}</span>
                       <span>·</span>
-                      <span>{prop.manages_availability ? "Disponibilità verificata" : "Su richiesta WhatsApp"}</span>
+                      <span>{prop.manages_availability ? t(lang, "availability_verified") : t(lang, "whatsapp_on_request")}</span>
                     </div>
                     <div style={{ ...btn("gold"), textAlign: "center", padding: "10px", fontSize: 11, borderRadius: 8, marginTop: 8 }}>
-                      {prop.manages_availability ? "📅 Vedi Disponibilità" : "💬 Richiedi via WhatsApp"}
+                      {prop.manages_availability ? t(lang, "view_availability") : t(lang, "request_whatsapp")}
                     </div>
                   </div>
                 </div>
@@ -710,14 +743,14 @@ export default function LandingPage() {
       {/* ── HOW IT WORKS ───────────────────────────────────────────────────── */}
       <section id="how" style={{ background: `linear-gradient(180deg, transparent 0%, ${C.surface} 30%, ${C.surface} 70%, transparent 100%)`, padding: "100px 32px" }}>
         <div style={{ maxWidth: 1000, margin: "0 auto", textAlign: "center" }}>
-          <div style={{ fontSize: 10, color: C.gold, letterSpacing: "4px", textTransform: "uppercase", marginBottom: 16 }}>Il Processo</div>
-          <h2 style={{ fontFamily: FONT, fontSize: 44, fontWeight: 300, color: C.goldLight, letterSpacing: "2px", marginBottom: 60 }}>Come Funziona</h2>
+          <div style={{ fontSize: 10, color: C.gold, letterSpacing: "4px", textTransform: "uppercase", marginBottom: 16 }}>{t(lang, "how_kicker")}</div>
+          <h2 style={{ fontFamily: FONT, fontSize: 44, fontWeight: 300, color: C.goldLight, letterSpacing: "2px", marginBottom: 60 }}>{t(lang, "how_title")}</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 40 }}>
             {[
-              { n: "01", icon: "🔍", title: "Scegli", desc: "Sfoglia la nostra selezione di ville, yacht, auto e esperienze esclusive a Ibiza." },
-              { n: "02", icon: "📩", title: "Richiedi", desc: "Invia una richiesta di disponibilità con le date e i dettagli del tuo soggiorno." },
-              { n: "03", icon: "🤝", title: "Conferma", desc: "Il tuo concierge dedicato ti contatterà entro poche ore per finalizzare ogni dettaglio." },
-              { n: "04", icon: "✨", title: "Goditi", desc: "Arriva, rilassati. Pensiamo noi a tutto il resto, dal check-in alle esperienze on demand." },
+              { n: "01", icon: "🔍", title: t(lang, "how_1_title"), desc: t(lang, "how_1_desc") },
+              { n: "02", icon: "📩", title: t(lang, "how_2_title"), desc: t(lang, "how_2_desc") },
+              { n: "03", icon: "🤝", title: t(lang, "how_3_title"), desc: t(lang, "how_3_desc") },
+              { n: "04", icon: "✨", title: t(lang, "how_4_title"), desc: t(lang, "how_4_desc") },
             ].map(s => (
               <div key={s.n} style={{ textAlign: "center" }}>
                 <div style={{ fontFamily: FONT, fontSize: 11, color: C.gold, letterSpacing: "3px", marginBottom: 16, opacity: 0.6 }}>{s.n}</div>
@@ -735,19 +768,19 @@ export default function LandingPage() {
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ background: `linear-gradient(135deg, ${C.surface} 0%, rgba(22,28,40,0.8) 100%)`, border: `1px solid ${C.borderGold}`, borderRadius: 24, padding: "64px 56px", display: "flex", gap: 64, alignItems: "center", flexWrap: "wrap", boxShadow: "0 8px 48px rgba(0,0,0,0.4)" }}>
             <div style={{ flex: 1, minWidth: 280 }}>
-              <div style={{ fontSize: 10, color: C.gold, letterSpacing: "4px", textTransform: "uppercase", marginBottom: 20 }}>Per Professionisti</div>
-              <h2 style={{ fontFamily: FONT, fontSize: 42, fontWeight: 300, color: C.goldLight, letterSpacing: "1.5px", lineHeight: 1.2, marginBottom: 24 }}>
-                Collabora<br />con Aura Ibiza
+              <div style={{ fontSize: 10, color: C.gold, letterSpacing: "4px", textTransform: "uppercase", marginBottom: 20 }}>{t(lang, "collab_kicker")}</div>
+              <h2 style={{ fontFamily: FONT, fontSize: 42, fontWeight: 300, color: C.goldLight, letterSpacing: "1.5px", lineHeight: 1.2, marginBottom: 24, whiteSpace: "pre-line" }}>
+                {t(lang, "collab_title")}
               </h2>
               <p style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.9, marginBottom: 32 }}>
-                Sei un agente immobiliare, un concierge professionista o un proprietario che vuole promuovere ville, barche o auto di lusso? Unisciti alla nostra rete e raggiungi clienti premium.
+                {t(lang, "collab_desc")}
               </p>
               <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 40 }}>
                 {[
-                  { icon: "🏠", text: "Proprietari di ville, appartamenti o barche" },
-                  { icon: "🤵", text: "Concierge e agenti di viaggio specializzati" },
-                  { icon: "🚗", text: "Provider di auto di lusso, transfer e noleggi" },
-                  { icon: "🌅", text: "Organizzatori di esperienze ed eventi" },
+                  { icon: "🏠", text: t(lang, "collab_b1") },
+                  { icon: "🤵", text: t(lang, "collab_b2") },
+                  { icon: "🚗", text: t(lang, "collab_b3") },
+                  { icon: "🌅", text: t(lang, "collab_b4") },
                 ].map(item => (
                   <div key={item.icon} style={{ display: "flex", alignItems: "center", gap: 14 }}>
                     <span style={{ fontSize: 20 }}>{item.icon}</span>
@@ -756,15 +789,15 @@ export default function LandingPage() {
                 ))}
               </div>
               <a href="/platform?register=1" style={{ ...btn("gold"), textDecoration: "none", display: "inline-block", padding: "14px 40px", fontSize: 13 }}>
-                Registrati ora →
+                {t(lang, "collab_cta")}
               </a>
             </div>
 
             <div style={{ flex: 1, minWidth: 260, display: "flex", flexDirection: "column", gap: 20 }}>
               {[
-                { title: "Visibilità Premium", desc: "Le tue proprietà e servizi vengono mostrati a clienti selezionati con alto potere d'acquisto.", icon: "📈" },
-                { title: "Gestione Semplice", desc: "Dashboard completa per gestire prenotazioni, pagamenti e collaboratori in un unico posto.", icon: "⚙️" },
-                { title: "Rete Professionale", desc: "Entra in un ecosistema di professionisti del lusso che collaborano per offrire il meglio.", icon: "🤝" },
+                { title: t(lang, "collab_s1_title"), desc: t(lang, "collab_s1_desc"), icon: "📈" },
+                { title: t(lang, "collab_s2_title"), desc: t(lang, "collab_s2_desc"), icon: "⚙️" },
+                { title: t(lang, "collab_s3_title"), desc: t(lang, "collab_s3_desc"), icon: "🤝" },
               ].map(b => (
                 <div key={b.title} style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 22px", display: "flex", gap: 16 }}>
                   <span style={{ fontSize: 24, flexShrink: 0 }}>{b.icon}</span>
@@ -789,31 +822,30 @@ export default function LandingPage() {
               <img src="/logo.png" alt="Aura Ibiza" style={{ height: 36, width: 36, borderRadius: "50%", objectFit: "cover" }} />
               <div style={{ fontFamily: FONT, fontSize: 20, fontWeight: 300, color: C.gold, letterSpacing: "4px", textTransform: "uppercase" }}>Aura Ibiza</div>
             </div>
-            <div style={{ fontSize: 12, color: C.textDim, lineHeight: 2 }}>
-              Luxury Concierge · Ibiza<br />
-              Esperienze su misura per i tuoi<br />momenti più speciali
+            <div style={{ fontSize: 12, color: C.textDim, lineHeight: 2, whiteSpace: "pre-line" }}>
+              {t(lang, "footer_tagline")}
             </div>
           </div>
 
           {/* Servizi */}
           <div>
-            <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 16 }}>Servizi</div>
-            {["Residenze di lusso", "Yacht & Marine", "Auto & Transfer", "Esperienze"].map(s => (
+            <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 16 }}>{t(lang, "footer_services")}</div>
+            {[t(lang, "footer_s1"), t(lang, "footer_s2"), t(lang, "footer_s3"), t(lang, "footer_s4")].map(s => (
               <div key={s} style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{s}</div>
             ))}
           </div>
 
           {/* Piattaforma */}
           <div>
-            <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 16 }}>Piattaforma</div>
-            <a href="/platform" style={{ display: "block", fontSize: 12, color: C.textMuted, marginBottom: 10, textDecoration: "none" }}>Accedi</a>
-            <a href="/platform?register=1" style={{ display: "block", fontSize: 12, color: C.textMuted, marginBottom: 10, textDecoration: "none" }}>Registrati</a>
-            <a href="#collaborate" style={{ display: "block", fontSize: 12, color: C.textMuted, textDecoration: "none" }}>Collabora</a>
+            <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 16 }}>{t(lang, "footer_platform")}</div>
+            <a href="/platform" style={{ display: "block", fontSize: 12, color: C.textMuted, marginBottom: 10, textDecoration: "none" }}>{t(lang, "footer_login")}</a>
+            <a href="/platform?register=1" style={{ display: "block", fontSize: 12, color: C.textMuted, marginBottom: 10, textDecoration: "none" }}>{t(lang, "footer_register")}</a>
+            <a href="#collaborate" style={{ display: "block", fontSize: 12, color: C.textMuted, textDecoration: "none" }}>{t(lang, "footer_collaborate")}</a>
           </div>
 
           {/* Contatti */}
           <div>
-            <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 16 }}>Contatti</div>
+            <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 16 }}>{t(lang, "footer_contacts")}</div>
             <a href="mailto:info.auraibiza@gmail.com" style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: C.textMuted, marginBottom: 12, textDecoration: "none", transition: "color 0.2s" }}
               onMouseEnter={e => (e.currentTarget.style.color = C.gold)} onMouseLeave={e => (e.currentTarget.style.color = C.textMuted)}>
               <span style={{ fontSize: 16 }}>✉</span>
@@ -835,7 +867,7 @@ export default function LandingPage() {
         </div>
 
         <div style={{ maxWidth: 1100, margin: "40px auto 0", paddingTop: 24, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-          <div style={{ fontSize: 11, color: C.textDim }}>© {new Date().getFullYear()} Aura Ibiza · Tutti i diritti riservati</div>
+          <div style={{ fontSize: 11, color: C.textDim }}>© {new Date().getFullYear()} Aura Ibiza · {t(lang, "footer_rights")}</div>
           <div style={{ display: "flex", gap: 20 }}>
             <a href="mailto:info.auraibiza@gmail.com" style={{ color: C.textDim, fontSize: 11, textDecoration: "none" }}>info.auraibiza@gmail.com</a>
             <a href="https://www.instagram.com/_aura_ibiza_/" target="_blank" rel="noopener noreferrer" style={{ color: C.textDim, fontSize: 11, textDecoration: "none" }}>Instagram</a>
@@ -873,8 +905,8 @@ export default function LandingPage() {
                   <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,14,22,0.7) 0%, transparent 60%)" }} />
                   <button onClick={(e) => { e.stopPropagation(); setDetailModal(null); setDetailRange({ start: null, end: null }); }}
                     style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-                  {prop.is_public === 0 && <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(200,169,110,0.2)", border: "1px solid rgba(200,169,110,0.5)", borderRadius: 20, padding: "4px 14px", fontSize: 11, color: C.goldLight, fontWeight: 700 }}>🔒 Esclusivo</div>}
-                  {images.length > 1 && <div style={{ position: "absolute", bottom: 12, right: 16, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 11, padding: "3px 10px", borderRadius: 20 }}>🔍 {images.length} foto</div>}
+                  {prop.is_public === 0 && <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(200,169,110,0.2)", border: "1px solid rgba(200,169,110,0.5)", borderRadius: 20, padding: "4px 14px", fontSize: 11, color: C.goldLight, fontWeight: 700 }}>🔒 {t(lang, "badge_exclusive")}</div>}
+                  {images.length > 1 && <div style={{ position: "absolute", bottom: 12, right: 16, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 11, padding: "3px 10px", borderRadius: 20 }}>🔍 {images.length}</div>}
                 </div>
               )}
 
@@ -882,7 +914,7 @@ export default function LandingPage() {
                 {/* Header */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 6 }}>{assetIcon[prop.asset_type]} {prop.asset_type}</div>
+                    <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 6 }}>{assetIcon[prop.asset_type]} {assetTypeLabel(lang, prop.asset_type)}</div>
                     <h2 style={{ fontFamily: FONT, fontSize: 30, fontWeight: 300, color: C.goldLight, marginBottom: 6, letterSpacing: "1px" }}>{prop.name}</h2>
                     <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 10 }}>📍 {prop.location}</div>
                     {prop.has_pdf ? (
@@ -895,17 +927,17 @@ export default function LandingPage() {
                           if (res.pdf_document) window.open(res.pdf_document, "_blank");
                         }}
                         style={{ ...btn("outline"), padding: "6px 14px", fontSize: 11 }}>
-                        {pdfLoadingId === prop.id ? "Caricamento…" : "📄 Scheda PDF"}
+                        {pdfLoadingId === prop.id ? t(lang, "pdf_loading") : t(lang, "pdf_open")}
                       </button>
                     ) : null}
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 10, color: C.textDim, letterSpacing: "1px", textTransform: "uppercase" }}>da</div>
-                    {(() => { const mp = rooms.reduce((min: number, r: any) => { const pr = getPricing(r.id); const p = pr?.min_price ?? Infinity; return p < min ? p : min; }, Infinity); return mp < Infinity ? <div style={{ fontFamily: FONT, fontSize: 28, color: C.gold }}>€{mp}<span style={{ fontSize: 13, color: C.textMuted }}>{unitSuffix(prop.asset_type)}</span></div> : null; })()}
+                    <div style={{ fontSize: 10, color: C.textDim, letterSpacing: "1px", textTransform: "uppercase" }}>{t(lang, "from_price")}</div>
+                    {(() => { const mp = rooms.reduce((min: number, r: any) => { const pr = getPricing(r.id); const p = pr?.min_price ?? Infinity; return p < min ? p : min; }, Infinity); return mp < Infinity ? <div style={{ fontFamily: FONT, fontSize: 28, color: C.gold }}>€{mp}<span style={{ fontSize: 13, color: C.textMuted }}>{unitSuffix(lang, prop.asset_type)}</span></div> : null; })()}
                   </div>
                 </div>
 
-                {prop.description && <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.8, marginBottom: 24 }}>{prop.description}</p>}
+                {localizedDescription(prop, lang) && <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.8, marginBottom: 24 }}>{localizedDescription(prop, lang)}</p>}
 
                 {/* Galleria miniature */}
                 {images.length > 1 && (
@@ -919,7 +951,7 @@ export default function LandingPage() {
                 <div style={{ display: "grid", gridTemplateColumns: rooms.length > 1 ? "1fr 1fr" : "1fr", gap: 20 }}>
                   {/* Colonna sinistra: selezione unità */}
                   <div>
-                    <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 12 }}>Unità disponibili</div>
+                    <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 12 }}>{t(lang, "available_units")}</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {rooms.map((r: any) => {
                         const pr = getPricing(r.id);
@@ -932,7 +964,7 @@ export default function LandingPage() {
                               transition: "all 0.2s" }}>
                             <div style={{ fontWeight: 600, color: isSelected ? C.gold : C.text, fontSize: 13 }}>{r.name}</div>
                             <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
-                              {r.capacity} ospiti{r.bedrooms ? ` · ${r.bedrooms} camere` : ""}{r.bathrooms ? ` · ${r.bathrooms} bagni` : ""} {pr ? `· €${pr.min_price}${unitSuffix(prop.asset_type)}` : ""}
+                              {r.capacity} {t(lang, "guests")}{r.bedrooms ? ` · ${r.bedrooms} ${t(lang, "bedrooms")}` : ""}{r.bathrooms ? ` · ${r.bathrooms} ${t(lang, "bathrooms")}` : ""} {pr ? `· €${pr.min_price}${unitSuffix(lang, prop.asset_type)}` : ""}
                             </div>
                             {r.description && <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{r.description}</div>}
                           </div>
@@ -945,24 +977,25 @@ export default function LandingPage() {
                   <div>
                     {managedAvail && detailRoom ? (
                       <div>
-                        <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 12 }}>Disponibilità</div>
+                        <div style={{ fontSize: 10, color: C.gold, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 12 }}>{t(lang, "availability_heading")}</div>
                         <PublicCalendar
                           roomId={detailRoom.id}
                           selectedRange={detailRange}
                           onRangeSelect={(s, e) => setDetailRange({ start: s, end: e })}
                           assetType={prop.asset_type}
+                          lang={lang}
                         />
                         {nights > 0 && (
                           <button style={{ ...btn("gold"), width: "100%", marginTop: 16, padding: "14px" }}
                             onClick={() => {
                               openModal(prop, detailRoom, detailRange.start || undefined, detailRange.end || undefined);
                             }}>
-                            Prenota {nights} {unitLabel(prop.asset_type, nights)} →
+                            {t(lang, "book_button", { n: nights, unit: unitLabel(lang, prop.asset_type, nights) })}
                           </button>
                         )}
                         {!detailRange.start && (
                           <div style={{ marginTop: 14, fontSize: 12, color: C.textDim, textAlign: "center" }}>
-                            Clicca sul giorno di check-in per selezionare le date
+                            {t(lang, "click_checkin")}
                           </div>
                         )}
                       </div>
@@ -970,19 +1003,19 @@ export default function LandingPage() {
                       <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingTop: 32 }}>
                         <div style={{ textAlign: "center" }}>
                           <div style={{ fontSize: 40, marginBottom: 16 }}>💬</div>
-                          <div style={{ fontFamily: FONT, fontSize: 20, color: C.goldLight, marginBottom: 8 }}>Prenota via WhatsApp</div>
+                          <div style={{ fontFamily: FONT, fontSize: 20, color: C.goldLight, marginBottom: 8 }}>{t(lang, "book_whatsapp_title")}</div>
                           <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.8 }}>
-                            Scrivici direttamente per verificare disponibilità e finalizzare la prenotazione. Risposta entro poche ore.
+                            {t(lang, "book_whatsapp_desc")}
                           </p>
                         </div>
                         <a href={waUrl} target="_blank" rel="noopener noreferrer"
                           style={{ ...btn("gold"), textDecoration: "none", textAlign: "center", padding: "16px", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: 10, background: "linear-gradient(135deg, #128C7E, #25D366)" }}>
                           <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                          <span style={{ color: "#fff" }}>Scrivi su WhatsApp</span>
+                          <span style={{ color: "#fff" }}>{t(lang, "whatsapp_write")}</span>
                         </a>
                         <a href={`mailto:info.auraibiza@gmail.com?subject=Richiesta disponibilità: ${encodeURIComponent(prop.name)}&body=${encodeURIComponent(`Ciao,\n\nSono interessato/a a ${prop.name}${detailRoom ? ` — ${detailRoom.name}` : ""}.\n\nVorrei verificare la disponibilità per le seguenti date:\n\nGrazie`)}`}
                           style={{ ...btn("outline"), textDecoration: "none", textAlign: "center", padding: "12px", fontSize: 12, display: "block" }}>
-                          ✉ Oppure scrivi via email
+                          {t(lang, "email_alt")}
                         </a>
                       </div>
                     )}
@@ -1044,12 +1077,12 @@ export default function LandingPage() {
             {!sent ? (
               <>
                 <div style={{ marginBottom: 28 }}>
-                  <div style={{ fontSize: 10, color: C.gold, letterSpacing: "3px", textTransform: "uppercase", marginBottom: 8 }}>Richiesta Disponibilità</div>
+                  <div style={{ fontSize: 10, color: C.gold, letterSpacing: "3px", textTransform: "uppercase", marginBottom: 8 }}>{t(lang, "req_kicker")}</div>
                   <h3 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 300, color: C.goldLight, marginBottom: 4 }}>{modal.property?.name}</h3>
-                  {modal.room && <div style={{ fontSize: 13, color: C.textMuted }}>Unità: <strong style={{ color: C.gold }}>{modal.room.name}</strong></div>}
+                  {modal.room && <div style={{ fontSize: 13, color: C.textMuted }}>{t(lang, "req_unit")}: <strong style={{ color: C.gold }}>{modal.room.name}</strong></div>}
                   {referralCode && (
                     <div style={{ marginTop: 12, padding: "8px 14px", background: "rgba(200,169,110,0.08)", border: `1px solid ${C.borderGold}`, borderRadius: 8, fontSize: 11, color: C.textMuted, display: "flex", alignItems: "center", gap: 8 }}>
-                      <span>🤝</span> Stai prenotando tramite il concierge <strong style={{ color: C.gold }}>{referralCode}</strong>
+                      <span>🤝</span> {(() => { const [pre, post] = t(lang, "req_referral").split("{name}"); return <>{pre}<strong style={{ color: C.gold }}>{referralCode}</strong>{post}</>; })()}
                     </div>
                   )}
                 </div>
@@ -1057,55 +1090,55 @@ export default function LandingPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
-                      <label style={labelStyle}>Nome *</label>
-                      <input style={inputStyle} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Mario Rossi" />
+                      <label style={labelStyle}>{t(lang, "req_name")}</label>
+                      <input style={inputStyle} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={t(lang, "req_name_ph")} />
                     </div>
                     <div>
-                      <label style={labelStyle}>Ospiti</label>
+                      <label style={labelStyle}>{t(lang, "req_guests")}</label>
                       <select style={{ ...inputStyle, appearance: "none" } as any} value={form.guests} onChange={e => setForm(f => ({ ...f, guests: e.target.value }))}>
-                        {[1,2,3,4,5,6,7,8,10,12,15,20].map(n => <option key={n} value={n}>{n} {n === 1 ? "persona" : "persone"}</option>)}
+                        {[1,2,3,4,5,6,7,8,10,12,15,20].map(n => <option key={n} value={n}>{n} {n === 1 ? t(lang, "req_person") : t(lang, "req_people")}</option>)}
                       </select>
                     </div>
                   </div>
                   <div>
-                    <label style={labelStyle}>Email</label>
+                    <label style={labelStyle}>{t(lang, "req_email")}</label>
                     <input style={inputStyle} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="mario@email.com" />
                   </div>
                   <div>
-                    <label style={labelStyle}>Telefono / WhatsApp</label>
+                    <label style={labelStyle}>{t(lang, "req_phone")}</label>
                     <input style={inputStyle} type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+39 340 ..." />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
-                      <label style={labelStyle}>Check-in</label>
+                      <label style={labelStyle}>{t(lang, "req_checkin")}</label>
                       <input style={inputStyle} type="date" value={form.checkIn} onChange={e => setForm(f => ({ ...f, checkIn: e.target.value }))} />
                     </div>
                     <div>
-                      <label style={labelStyle}>Check-out</label>
+                      <label style={labelStyle}>{t(lang, "req_checkout")}</label>
                       <input style={inputStyle} type="date" value={form.checkOut} onChange={e => setForm(f => ({ ...f, checkOut: e.target.value }))} />
                     </div>
                   </div>
                   <div>
-                    <label style={labelStyle}>Messaggio</label>
-                    <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" } as any} value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} placeholder="Richieste speciali, domande, dettagli aggiuntivi..." />
+                    <label style={labelStyle}>{t(lang, "req_message")}</label>
+                    <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" } as any} value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} placeholder={t(lang, "req_message_ph")} />
                   </div>
 
                   {formErr && <div style={{ fontSize: 12, color: C.danger, padding: "10px 14px", background: `${C.danger}12`, borderRadius: 8, border: `1px solid ${C.danger}33` }}>{formErr}</div>}
 
                   <button style={{ ...btn("gold"), width: "100%", padding: "14px", fontSize: 13, marginTop: 4 }} onClick={handleRequest} disabled={sending}>
-                    {sending ? "Invio in corso..." : "Invia Richiesta"}
+                    {sending ? t(lang, "req_sending") : t(lang, "req_send")}
                   </button>
-                  <button style={{ ...btn(), width: "100%", padding: "10px", fontSize: 11 }} onClick={() => setModal(null)}>Annulla</button>
+                  <button style={{ ...btn(), width: "100%", padding: "10px", fontSize: 11 }} onClick={() => setModal(null)}>{t(lang, "req_cancel")}</button>
                 </div>
               </>
             ) : (
               <div style={{ textAlign: "center", padding: "20px 0" }}>
                 <div style={{ fontSize: 56, marginBottom: 24 }}>✅</div>
-                <h3 style={{ fontFamily: FONT, fontSize: 28, fontWeight: 300, color: C.goldLight, marginBottom: 16 }}>Richiesta Inviata!</h3>
+                <h3 style={{ fontFamily: FONT, fontSize: 28, fontWeight: 300, color: C.goldLight, marginBottom: 16 }}>{t(lang, "req_success_title")}</h3>
                 <p style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.8, marginBottom: 32 }}>
-                  Grazie {form.name}! Il nostro team ti contatterà entro poche ore per confermare la disponibilità e fornirti tutti i dettagli.
+                  {t(lang, "req_success_desc", { name: form.name })}
                 </p>
-                <button style={{ ...btn("gold"), padding: "12px 36px" }} onClick={() => setModal(null)}>Chiudi</button>
+                <button style={{ ...btn("gold"), padding: "12px 36px" }} onClick={() => setModal(null)}>{t(lang, "req_close")}</button>
               </div>
             )}
           </div>

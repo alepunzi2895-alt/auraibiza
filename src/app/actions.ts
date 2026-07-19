@@ -94,6 +94,7 @@ export async function initDatabase() {
       "ALTER TABLE availability ADD COLUMN blocked_source TEXT",
       "ALTER TABLE rooms ADD COLUMN bedrooms INTEGER",
       "ALTER TABLE rooms ADD COLUMN bathrooms INTEGER",
+      "ALTER TABLE properties ADD COLUMN description_i18n TEXT",
     ];
     for (const sql of migrations) {
       try { await db.execute(sql); } catch (_e) {}
@@ -945,8 +946,8 @@ export async function getPublicListings(referralCode?: string) {
     // dettaglio di un asset. Usare una colonna dedicata invece di json_extract(image, '$[0]')
     // evita che il DB debba parsare l'intero blob JSON (anche multi-MB) solo per estrarne il primo elemento.
     const propertiesSQL = showAll
-      ? "SELECT id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties ORDER BY name ASC"
-      : "SELECT id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
+      ? "SELECT id, name, location, description, description_i18n, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties ORDER BY name ASC"
+      : "SELECT id, name, location, description, description_i18n, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
     const properties = await db.execute(propertiesSQL);
     const rooms = await db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms FROM rooms ORDER BY name ASC");
     const pricing = await db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id");
