@@ -25,6 +25,7 @@ const LABEL_TO_DBNAME = {
   'DR. NO pershing 6x eng': 'Dr. No (Pershing 6X)',
   'INSPIRATION pershing 90 eng': 'Pershing 90 (My Danzas)',
   'SENSATION pershing 72 eng': 'Sensation (Pershing 72)',
+  'Chill Out ENG 2026': 'Chill Out (Mangusta 92)',
 };
 
 function safeName(label) {

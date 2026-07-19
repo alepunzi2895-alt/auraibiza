@@ -162,8 +162,8 @@ function PublicCalendar({ roomId, onRangeSelect, selectedRange, assetType, lang 
 
             let bg = "transparent";
             if (isPast) bg = "rgba(255,255,255,0.02)";
-            else if (isBooked) bg = "rgba(180,68,68,0.25)";
-            else if (isBlocked) bg = "rgba(100,80,40,0.2)";
+            else if (isBooked) bg = "rgba(180,68,68,0.35)";
+            else if (isBlocked) bg = "rgba(180,68,68,0.35)";
             else if (isStart || isEnd) bg = C.gold;
             else if (inRange) bg = "rgba(200,169,110,0.2)";
             else if (isAvail && status === "available") bg = "rgba(61,158,106,0.15)";
