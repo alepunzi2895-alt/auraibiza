@@ -31,6 +31,8 @@ const en: Dict = {
   cat_all: "All", cat_residenze: "Residences", cat_marine: "Marine", cat_mobilita: "Mobility",
   view_grid: "Grid", view_map: "Map",
   no_results: "No service available in this category right now.",
+  search_placeholder: "🔍 Search by name or area...",
+  filter_any: "Any", filter_guests_min: "Guests", filter_bedrooms_min: "Bedrooms", filter_bathrooms_min: "Bathrooms",
 
   unit_one: "unit", unit_other: "units available",
   availability_verified: "Verified availability", whatsapp_on_request: "On request via WhatsApp",
@@ -98,6 +100,10 @@ const en: Dict = {
 
   unit_night: "night", unit_nights: "nights", unit_day: "day", unit_days: "days",
 
+  wa_message: "Hello! I'm interested in *{name}*{room}.\n\nCould you let me know availability? I'm looking at these dates: ",
+  email_subject: "Availability request: {name}",
+  email_body: "Hello,\n\nI'm interested in {name}{room}.\n\nI'd like to check availability for the following dates:\n\nThank you",
+
   month_1: "January", month_2: "February", month_3: "March", month_4: "April", month_5: "May", month_6: "June",
   month_7: "July", month_8: "August", month_9: "September", month_10: "October", month_11: "November", month_12: "December",
   day_mon: "Mo", day_tue: "Tu", day_wed: "We", day_thu: "Th", day_fri: "Fr", day_sat: "Sa", day_sun: "Su",
@@ -120,6 +126,8 @@ const it: Dict = {
   cat_all: "Tutto", cat_residenze: "Residenze", cat_marine: "Marine", cat_mobilita: "Mobilità",
   view_grid: "Griglia", view_map: "Mappa",
   no_results: "Nessun servizio disponibile in questa categoria al momento.",
+  search_placeholder: "🔍 Cerca per nome o zona...",
+  filter_any: "Tutti", filter_guests_min: "Ospiti", filter_bedrooms_min: "Camere", filter_bathrooms_min: "Bagni",
 
   unit_one: "unità", unit_other: "unità disponibili",
   availability_verified: "Disponibilità verificata", whatsapp_on_request: "Su richiesta WhatsApp",
@@ -187,6 +195,10 @@ const it: Dict = {
 
   unit_night: "notte", unit_nights: "notti", unit_day: "giorno", unit_days: "giorni",
 
+  wa_message: "Ciao! Sono interessato/a a *{name}*{room}.\n\nPotreste indicarmi la disponibilità? Sto cercando queste date: ",
+  email_subject: "Richiesta disponibilità: {name}",
+  email_body: "Ciao,\n\nSono interessato/a a {name}{room}.\n\nVorrei verificare la disponibilità per le seguenti date:\n\nGrazie",
+
   month_1: "Gennaio", month_2: "Febbraio", month_3: "Marzo", month_4: "Aprile", month_5: "Maggio", month_6: "Giugno",
   month_7: "Luglio", month_8: "Agosto", month_9: "Settembre", month_10: "Ottobre", month_11: "Novembre", month_12: "Dicembre",
   day_mon: "Lu", day_tue: "Ma", day_wed: "Me", day_thu: "Gi", day_fri: "Ve", day_sat: "Sa", day_sun: "Do",
@@ -209,6 +221,8 @@ const es: Dict = {
   cat_all: "Todo", cat_residenze: "Residencias", cat_marine: "Marina", cat_mobilita: "Movilidad",
   view_grid: "Cuadrícula", view_map: "Mapa",
   no_results: "No hay ningún servicio disponible en esta categoría por ahora.",
+  search_placeholder: "🔍 Buscar por nombre o zona...",
+  filter_any: "Todos", filter_guests_min: "Huéspedes", filter_bedrooms_min: "Habitaciones", filter_bathrooms_min: "Baños",
 
   unit_one: "unidad", unit_other: "unidades disponibles",
   availability_verified: "Disponibilidad verificada", whatsapp_on_request: "Bajo petición por WhatsApp",
@@ -276,6 +290,10 @@ const es: Dict = {
 
   unit_night: "noche", unit_nights: "noches", unit_day: "día", unit_days: "días",
 
+  wa_message: "¡Hola! Estoy interesado/a en *{name}*{room}.\n\n¿Podríais indicarme la disponibilidad? Estoy buscando estas fechas: ",
+  email_subject: "Solicitud de disponibilidad: {name}",
+  email_body: "Hola,\n\nEstoy interesado/a en {name}{room}.\n\nMe gustaría comprobar la disponibilidad para las siguientes fechas:\n\nGracias",
+
   month_1: "Enero", month_2: "Febrero", month_3: "Marzo", month_4: "Abril", month_5: "Mayo", month_6: "Junio",
   month_7: "Julio", month_8: "Agosto", month_9: "Septiembre", month_10: "Octubre", month_11: "Noviembre", month_12: "Diciembre",
   day_mon: "Lu", day_tue: "Ma", day_wed: "Mi", day_thu: "Ju", day_fri: "Vi", day_sat: "Sa", day_sun: "Do",
@@ -298,6 +316,8 @@ const de: Dict = {
   cat_all: "Alle", cat_residenze: "Residenzen", cat_marine: "Marine", cat_mobilita: "Mobilität",
   view_grid: "Raster", view_map: "Karte",
   no_results: "In dieser Kategorie ist derzeit kein Angebot verfügbar.",
+  search_placeholder: "🔍 Suche nach Name oder Gegend...",
+  filter_any: "Alle", filter_guests_min: "Gäste", filter_bedrooms_min: "Schlafzimmer", filter_bathrooms_min: "Badezimmer",
 
   unit_one: "Einheit", unit_other: "Einheiten verfügbar",
   availability_verified: "Verfügbarkeit bestätigt", whatsapp_on_request: "Auf Anfrage über WhatsApp",
@@ -365,6 +385,10 @@ const de: Dict = {
 
   unit_night: "Nacht", unit_nights: "Nächte", unit_day: "Tag", unit_days: "Tage",
 
+  wa_message: "Hallo! Ich interessiere mich für *{name}*{room}.\n\nKönnten Sie mir die Verfügbarkeit mitteilen? Ich suche für folgende Daten: ",
+  email_subject: "Verfügbarkeitsanfrage: {name}",
+  email_body: "Hallo,\n\nich interessiere mich für {name}{room}.\n\nIch möchte die Verfügbarkeit für folgende Daten prüfen:\n\nDanke",
+
   month_1: "Januar", month_2: "Februar", month_3: "März", month_4: "April", month_5: "Mai", month_6: "Juni",
   month_7: "Juli", month_8: "August", month_9: "September", month_10: "Oktober", month_11: "November", month_12: "Dezember",
   day_mon: "Mo", day_tue: "Di", day_wed: "Mi", day_thu: "Do", day_fri: "Fr", day_sat: "Sa", day_sun: "So",
@@ -387,6 +411,8 @@ const fr: Dict = {
   cat_all: "Tout", cat_residenze: "Résidences", cat_marine: "Marine", cat_mobilita: "Mobilité",
   view_grid: "Grille", view_map: "Carte",
   no_results: "Aucun service disponible dans cette catégorie pour le moment.",
+  search_placeholder: "🔍 Rechercher par nom ou zone...",
+  filter_any: "Tous", filter_guests_min: "Voyageurs", filter_bedrooms_min: "Chambres", filter_bathrooms_min: "Salles de bain",
 
   unit_one: "unité", unit_other: "unités disponibles",
   availability_verified: "Disponibilité vérifiée", whatsapp_on_request: "Sur demande via WhatsApp",
@@ -453,6 +479,10 @@ const fr: Dict = {
   req_err_send: "Erreur lors de l'envoi. Veuillez réessayer.",
 
   unit_night: "nuit", unit_nights: "nuits", unit_day: "jour", unit_days: "jours",
+
+  wa_message: "Bonjour ! Je suis intéressé(e) par *{name}*{room}.\n\nPourriez-vous m'indiquer la disponibilité ? Je recherche ces dates : ",
+  email_subject: "Demande de disponibilité : {name}",
+  email_body: "Bonjour,\n\nJe suis intéressé(e) par {name}{room}.\n\nJe voudrais vérifier la disponibilité pour les dates suivantes :\n\nMerci",
 
   month_1: "Janvier", month_2: "Février", month_3: "Mars", month_4: "Avril", month_5: "Mai", month_6: "Juin",
   month_7: "Juillet", month_8: "Août", month_9: "Septembre", month_10: "Octobre", month_11: "Novembre", month_12: "Décembre",
