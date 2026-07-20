@@ -1,0 +1,44 @@
+# Pannello gestionale: mai da indicizzare o far scansionare da nessuno.
+User-agent: *
+Disallow: /platform
+
+# Crawler/agenti di training e scraping AI noti: bloccati esplicitamente
+# (i bot che rispettano robots.txt si fermano qui; non protegge da chi lo ignora).
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Diffbot
+Disallow: /
+
+User-agent: omgili
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+User-agent: Amazonbot
+Disallow: /

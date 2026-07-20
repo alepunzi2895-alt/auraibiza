@@ -22,7 +22,7 @@ import {
   getPlatformCommissions, upsertPlatformCommission, deletePlatformCommission,
   togglePropertyPublic, togglePropertyManagesAvailability,
   addAgentToConcierge, removeAgentFromConcierge, updateAgentCommissionRate,
-  setRoomIcalUrl, syncRoomIcal,
+  setRoomIcalUrl, syncRoomIcal, getPropertyGallery,
 } from "../actions";
 
 const IBIZA_CENTER: [number, number] = [38.9067, 1.4206];
@@ -840,11 +840,16 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
     setTab("bookings");
   };
 
-  const generatePdf = (b: any) => {
+  const generatePdf = async (b: any) => {
     const room = data.rooms.find((r: any) => r.id === b.room_id);
     const prop = data.properties.find((p: any) => p.id === room?.property_id)
       || (data.collaboratedProperties || []).find((p: any) => p.id === room?.property_id);
-    setPdfPreview({ booking: b, room, property: prop });
+    let propFull = prop;
+    if (prop) {
+      const gallery = await getPropertyGallery(prop.id);
+      if (gallery.image) propFull = { ...prop, image: gallery.image };
+    }
+    setPdfPreview({ booking: b, room, property: propFull });
   };
 
   const handleStatusChange = async (id: string, st: string) => { 
@@ -1587,6 +1592,20 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
   const allRooms = data.rooms.filter((r: any) => properties.some((p: any) => p.id === r.property_id));
   const ownerAssetCat = ASSET_CATEGORIES.find(c => c.key === assetTab) || ASSET_CATEGORIES[0];
   const filteredProperties = properties.filter((p: any) => ownerAssetCat.types.includes(p.asset_type || "apartment"));
+
+  // Il payload del dashboard ora contiene solo la cover_image (fix perf.):
+  // carichiamo la galleria completa on-demand per le proprietà mostrate nel tab Proprietà.
+  const [galleryMap, setGalleryMap] = useState<Record<string, string>>({});
+  const refreshGallery = async (propId: string) => {
+    const g = await getPropertyGallery(propId);
+    if (g.image) setGalleryMap(prev => ({ ...prev, [propId]: g.image as string }));
+  };
+  useEffect(() => {
+    if (tab !== "properties") return;
+    filteredProperties.forEach((prop: any) => {
+      if (!galleryMap[prop.id]) refreshGallery(prop.id);
+    });
+  }, [tab, filteredProperties.map((p: any) => p.id).join(",")]);
   const ownerAssetCounts = Object.fromEntries(ASSET_CATEGORIES.map(cat => [
     cat.key, properties.filter((p: any) => cat.types.includes(p.asset_type || "apartment")).length
   ]));
@@ -1659,6 +1678,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
         base64 = await compressImage(base64);
       }
       await updatePropertyImage(propId, base64);
+      await refreshGallery(propId);
       setMsg("Foto proprietà aggiornata con successo.");
       refresh();
     };
@@ -1835,11 +1855,16 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
     refresh();
   };
 
-  const generatePdf = (b: any) => {
+  const generatePdf = async (b: any) => {
     const room = data.rooms.find((r: any) => r.id === b.room_id);
     const prop = data.properties.find((p: any) => p.id === room?.property_id)
       || (data.collaboratedProperties || []).find((p: any) => p.id === room?.property_id);
-    setPdfPreview({ booking: b, room, property: prop });
+    let propFull = prop;
+    if (prop) {
+      const gallery = await getPropertyGallery(prop.id);
+      if (gallery.image) propFull = { ...prop, image: gallery.image };
+    }
+    setPdfPreview({ booking: b, room, property: propFull });
   };
 
   const handleAddProperty = async () => {
@@ -1936,11 +1961,11 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false }
                         {prop.description && <div style={{ fontSize: 12, color: C.textMuted, maxWidth: 800, lineHeight: 1.6 }}>{prop.description}</div>}
                         
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                          {parseImages(prop.image).map((img, idx) => (
+                          {parseImages(galleryMap[prop.id] || prop.image).map((img, idx) => (
                             <div key={idx} style={{ position: "relative", width: 80, height: 80, borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}` }}>
                                <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                               <button 
-                                 onClick={async () => { if(confirm("Eliminare questa foto?")) { await removePropertyImage(prop.id, idx); refresh(); } }}
+                               <button
+                                 onClick={async () => { if(confirm("Eliminare questa foto?")) { await removePropertyImage(prop.id, idx); await refreshGallery(prop.id); refresh(); } }}
                                  style={{ position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,0.6)", color: "#FF4D4D", border: "none", borderRadius: "50%", width: 22, height: 22, cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}
                                >✕</button>
                             </div>
@@ -3270,6 +3295,63 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
     refresh();
   };
 
+  // Gestione asset (tutte le proprietà, non solo quelle dell'admin): editing
+  // completo di residenze/barche/auto da un'unica vista trasversale.
+  const [assetMgmtTab, setAssetMgmtTab] = useState("residenze");
+  const [assetSearch, setAssetSearch] = useState("");
+  const [editAsset, setEditAsset] = useState<{ id: string; name: string; location: string; description: string; asset_type: string } | null>(null);
+  const [editAssetRoom, setEditAssetRoom] = useState<{ id: string; name: string; capacity: string; description: string; bedrooms: string; bathrooms: string } | null>(null);
+  const [editAssetPricing, setEditAssetPricing] = useState<{ roomId: string; month: string; basePrice: string; cleaningFee: string } | null>(null);
+  const allProperties: any[] = data.properties || [];
+  const allRoomsForAssets: any[] = data.rooms || [];
+  const allPricingForAssets: any[] = data.pricing || [];
+  const assetCatCounts = Object.fromEntries(ASSET_CATEGORIES.map(cat => [
+    cat.key, cat.types.length === 0 ? allProperties.length : allProperties.filter((p: any) => cat.types.includes(p.asset_type || "apartment")).length,
+  ]));
+  const currentAssetMgmtCat = ASSET_CATEGORIES.find(c => c.key === assetMgmtTab) || ASSET_CATEGORIES[0];
+  const filteredAssets = allProperties.filter((p: any) => {
+    if (currentAssetMgmtCat.types.length > 0 && !currentAssetMgmtCat.types.includes(p.asset_type || "apartment")) return false;
+    if (assetSearch.trim() && !p.name.toLowerCase().includes(assetSearch.toLowerCase()) && !(p.location || "").toLowerCase().includes(assetSearch.toLowerCase())) return false;
+    return true;
+  });
+
+  // Il payload del dashboard ora contiene solo la cover_image (fix perf.):
+  // carichiamo la galleria completa on-demand per le proprietà mostrate in Gestisci Asset.
+  const [assetGalleryMap, setAssetGalleryMap] = useState<Record<string, string>>({});
+  const refreshAssetGallery = async (propId: string) => {
+    const g = await getPropertyGallery(propId);
+    if (g.image) setAssetGalleryMap(prev => ({ ...prev, [propId]: g.image as string }));
+  };
+  useEffect(() => {
+    if (tab !== "manageassets") return;
+    filteredAssets.forEach((prop: any) => {
+      if (!assetGalleryMap[prop.id]) refreshAssetGallery(prop.id);
+    });
+  }, [tab, filteredAssets.map((p: any) => p.id).join(",")]);
+
+  const handleAssetImageUpload = async (propId: string, file: File) => {
+    if (file.size > 20 * 1024 * 1024) { alert(`${file.name}: troppo grande (max 20MB)`); return; }
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target?.result as string;
+      const compressed = file.size > 1024 * 1024 ? await compressImage(base64) : base64;
+      await updatePropertyImage(propId, compressed);
+      await refreshAssetGallery(propId);
+      refresh();
+    };
+    reader.readAsDataURL(file);
+  };
+  const handleAssetPdfUpload = async (propId: string, file: File) => {
+    if (file.type !== "application/pdf") { alert("Il file deve essere un PDF."); return; }
+    if (file.size > 10 * 1024 * 1024) { alert("Il PDF è troppo grande (max 10MB)."); return; }
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      await updatePropertyPdf(propId, e.target?.result as string, file.name);
+      refresh();
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleApprove = async (userId: string) => {
     await approveUser(userId);
     setMsg("Utente approvato");
@@ -3399,6 +3481,7 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
           { key: "users", l: "👥 Utenti" },
           { key: "pending", l: `⏳ In Attesa${pendingUsers.length > 0 ? ` (${pendingUsers.length})` : ""}` },
           { key: "addasset", l: "➕ Aggiungi Asset" },
+          { key: "manageassets", l: `🏠 Gestisci Asset (${allProperties.length})` },
           { key: "bookings", l: `📖 Prenotazioni (${allBookings.length})` },
           { key: "requests", l: "📥 Richieste Clienti" },
           { key: "platform", l: "⚙️ Commissioni" },
@@ -3516,6 +3599,188 @@ function AdminDashboard({ user, data, refresh }: { user: User; data: any; refres
                     );
                   })}</tbody>
                 </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "manageassets" && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+              <h2 style={{ ...h2Style, margin: 0 }}>Gestisci Asset — tutte le proprietà</h2>
+              <input placeholder="🔍 Cerca nome o zona..." style={{ ...input, width: 220, padding: "6px 12px" }} value={assetSearch} onChange={e => setAssetSearch(e.target.value)} />
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+              {ASSET_CATEGORIES.map(cat => (
+                <div key={cat.key} onClick={() => setAssetMgmtTab(cat.key)} style={{
+                  padding: "8px 16px", borderRadius: 20, cursor: "pointer", fontSize: 12, fontWeight: 600,
+                  border: assetMgmtTab === cat.key ? `1px solid ${C.borderGold}` : `1px solid ${C.border}`,
+                  background: assetMgmtTab === cat.key ? C.goldGlow : "rgba(255,255,255,0.03)",
+                  color: assetMgmtTab === cat.key ? C.gold : C.textMuted,
+                }}>
+                  {cat.icon} {cat.label} <span style={badge(C.textDim)}>{assetCatCounts[cat.key]}</span>
+                </div>
+              ))}
+            </div>
+
+            {filteredAssets.length === 0 ? (
+              <div style={{ ...card, textAlign: "center", color: C.textDim }}>Nessun asset trovato.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {filteredAssets.map((prop: any) => {
+                  const propRooms = allRoomsForAssets.filter((r: any) => r.property_id === prop.id);
+                  const images = parseImages(assetGalleryMap[prop.id] || prop.image);
+                  const owner = allUsers.find((u: any) => u.id === prop.owner_id);
+                  return (
+                    <div key={prop.id} style={{ ...card, display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+                        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                          <div style={{ width: 90, height: 70, borderRadius: 8, overflow: "hidden", background: C.surfaceAlt, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {images[0] ? <img src={images[0]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 24, opacity: 0.4 }}>{assetLabel(prop.asset_type).split(" ")[0]}</span>}
+                          </div>
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                              <strong style={{ fontSize: 16, color: C.goldLight }}>{prop.name}</strong>
+                              <span style={badge(C.goldDark)}>{assetLabel(prop.asset_type)}</span>
+                            </div>
+                            <div style={{ fontSize: 12, color: C.textMuted }}>📍 {prop.location}</div>
+                            <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>Proprietario: {owner?.nickname || "—"} · {propRooms.length} unità · {images.length} foto</div>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button style={{ ...btn(), padding: "6px 12px", fontSize: 11 }} onClick={() => setEditAsset({ id: prop.id, name: prop.name, location: prop.location, description: prop.description || "", asset_type: prop.asset_type || "apartment" })}>✏️ Modifica</button>
+                          <button
+                            title={prop.is_public === 0 ? "Nascosto dalla vetrina" : "Visibile in vetrina"}
+                            onClick={async () => { await togglePropertyPublic(prop.id, prop.is_public === 0); refresh(); }}
+                            style={{ ...btn(), padding: "6px 12px", fontSize: 11, color: prop.is_public === 0 ? C.textDim : C.success }}>
+                            {prop.is_public === 0 ? "🔒 Nascosto" : "🌐 In vetrina"}
+                          </button>
+                          <button style={{ ...btn(), padding: "6px 10px", fontSize: 13, borderColor: C.danger + "55", color: C.danger }} title="Elimina proprietà"
+                            onClick={async () => { if (confirm(`Eliminare "${prop.name}" e tutte le sue camere/prenotazioni? Azione irreversibile.`)) { await deletePropertyAction(prop.id); refresh(); } }}>🗑</button>
+                        </div>
+                      </div>
+
+                      {/* Galleria foto */}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {images.map((img, idx) => (
+                          <div key={idx} style={{ position: "relative", width: 64, height: 64, borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}` }}>
+                            <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            <button onClick={async () => { if (confirm("Eliminare questa foto?")) { await removePropertyImage(prop.id, idx); await refreshAssetGallery(prop.id); refresh(); } }}
+                              style={{ position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,0.6)", color: "#FF4D4D", border: "none", borderRadius: "50%", width: 20, height: 20, cursor: "pointer", fontSize: 9 }}>✕</button>
+                          </div>
+                        ))}
+                        <label style={{ width: 64, height: 64, borderRadius: 6, border: `2px dashed ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: C.textMuted, fontSize: 18 }}>
+                          +
+                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleAssetImageUpload(prop.id, f); }} />
+                        </label>
+                      </div>
+
+                      {/* PDF */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        {prop.pdf_name ? (
+                          <>
+                            <span style={{ fontSize: 12, color: C.gold }}>📄 {prop.pdf_name}</span>
+                            <button onClick={async () => { if (confirm("Rimuovere il PDF?")) { await removePropertyPdf(prop.id); refresh(); } }} style={{ ...btn(), padding: "3px 10px", fontSize: 10, color: C.danger, borderColor: C.danger + "55" }}>Rimuovi</button>
+                          </>
+                        ) : (
+                          <label style={{ ...btn(), padding: "5px 12px", fontSize: 11, cursor: "pointer" }}>
+                            + Carica scheda PDF
+                            <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleAssetPdfUpload(prop.id, f); }} />
+                          </label>
+                        )}
+                      </div>
+
+                      {/* Unità / prezzi */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {propRooms.map((room: any) => {
+                          const roomPricing = allPricingForAssets.filter((p: any) => p.room_id === room.id).sort((a: any, b: any) => a.month.localeCompare(b.month));
+                          const current = roomPricing[0];
+                          return (
+                            <div key={room.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: C.surfaceAlt, borderRadius: 6, flexWrap: "wrap", gap: 8 }}>
+                              <div style={{ fontSize: 12 }}>
+                                <strong style={{ color: C.text }}>{room.name}</strong>
+                                <span style={{ color: C.textDim, marginLeft: 8 }}>{room.capacity} ospiti{room.bedrooms ? ` · ${room.bedrooms} camere` : ""}{room.bathrooms ? ` · ${room.bathrooms} bagni` : ""}</span>
+                              </div>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                {current && <span style={{ fontSize: 12, color: C.gold }}>€{current.base_price}{unitSuffix(prop.asset_type)}</span>}
+                                <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetRoom({ id: room.id, name: room.name, capacity: String(room.capacity), description: room.description || "", bedrooms: room.bedrooms != null ? String(room.bedrooms) : "", bathrooms: room.bathrooms != null ? String(room.bathrooms) : "" })}>✏️ Unità</button>
+                                {current && <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetPricing({ roomId: room.id, month: current.month, basePrice: String(current.base_price), cleaningFee: String(current.cleaning_fee) })}>💶 Prezzo</button>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Modale modifica proprietà */}
+            {editAsset && (
+              <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300 }} onClick={() => setEditAsset(null)}>
+                <div style={{ ...card, width: 440, maxWidth: "92vw" }} onClick={e => e.stopPropagation()}>
+                  <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>Modifica proprietà</h3>
+                  <div style={{ marginBottom: 12 }}><label style={label}>Nome</label><input style={input} value={editAsset.name} onChange={e => setEditAsset({ ...editAsset, name: e.target.value })} /></div>
+                  <div style={{ marginBottom: 12 }}><label style={label}>Località</label><input style={input} value={editAsset.location} onChange={e => setEditAsset({ ...editAsset, location: e.target.value })} /></div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={label}>Tipo asset</label>
+                    <select style={sel} value={editAsset.asset_type} onChange={e => setEditAsset({ ...editAsset, asset_type: e.target.value })}>
+                      {ASSET_TYPES.map(a => <option key={a.v} value={a.v}>{a.l}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ marginBottom: 16 }}><label style={label}>Descrizione</label><textarea style={{ ...input, minHeight: 100 }} value={editAsset.description} onChange={e => setEditAsset({ ...editAsset, description: e.target.value })} /></div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
+                      await updatePropertyAction(editAsset.id, editAsset.name, editAsset.location, editAsset.description);
+                      await updatePropertyAssetType(editAsset.id, editAsset.asset_type);
+                      setEditAsset(null); setMsg("Proprietà aggiornata"); refresh();
+                    }}>Salva</button>
+                    <button style={{ ...btn(), flex: 1 }} onClick={() => setEditAsset(null)}>Annulla</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modale modifica unità */}
+            {editAssetRoom && (
+              <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300 }} onClick={() => setEditAssetRoom(null)}>
+                <div style={{ ...card, width: 400, maxWidth: "92vw" }} onClick={e => e.stopPropagation()}>
+                  <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>Modifica unità</h3>
+                  <div style={{ marginBottom: 12 }}><label style={label}>Nome</label><input style={input} value={editAssetRoom.name} onChange={e => setEditAssetRoom({ ...editAssetRoom, name: e.target.value })} /></div>
+                  <div style={{ marginBottom: 12 }}><label style={label}>Capacità (ospiti)</label><input style={input} type="number" value={editAssetRoom.capacity} onChange={e => setEditAssetRoom({ ...editAssetRoom, capacity: e.target.value })} /></div>
+                  <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+                    <div style={{ flex: 1 }}><label style={label}>Camere da letto</label><input style={input} type="number" value={editAssetRoom.bedrooms} onChange={e => setEditAssetRoom({ ...editAssetRoom, bedrooms: e.target.value })} /></div>
+                    <div style={{ flex: 1 }}><label style={label}>Bagni</label><input style={input} type="number" value={editAssetRoom.bathrooms} onChange={e => setEditAssetRoom({ ...editAssetRoom, bathrooms: e.target.value })} /></div>
+                  </div>
+                  <div style={{ marginBottom: 16 }}><label style={label}>Descrizione</label><textarea style={{ ...input, minHeight: 80 }} value={editAssetRoom.description} onChange={e => setEditAssetRoom({ ...editAssetRoom, description: e.target.value })} /></div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
+                      await updateRoomAction(editAssetRoom.id, editAssetRoom.name, Number(editAssetRoom.capacity), editAssetRoom.description, editAssetRoom.bedrooms ? Number(editAssetRoom.bedrooms) : null, editAssetRoom.bathrooms ? Number(editAssetRoom.bathrooms) : null);
+                      setEditAssetRoom(null); setMsg("Unità aggiornata"); refresh();
+                    }}>Salva</button>
+                    <button style={{ ...btn(), flex: 1 }} onClick={() => setEditAssetRoom(null)}>Annulla</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modale modifica prezzo */}
+            {editAssetPricing && (
+              <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300 }} onClick={() => setEditAssetPricing(null)}>
+                <div style={{ ...card, width: 360, maxWidth: "92vw" }} onClick={e => e.stopPropagation()}>
+                  <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>Modifica prezzo · {editAssetPricing.month}</h3>
+                  <div style={{ marginBottom: 12 }}><label style={label}>Prezzo base</label><input style={input} type="number" value={editAssetPricing.basePrice} onChange={e => setEditAssetPricing({ ...editAssetPricing, basePrice: e.target.value })} /></div>
+                  <div style={{ marginBottom: 16 }}><label style={label}>Pulizie</label><input style={input} type="number" value={editAssetPricing.cleaningFee} onChange={e => setEditAssetPricing({ ...editAssetPricing, cleaningFee: e.target.value })} /></div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
+                      await updatePricingAction(editAssetPricing.roomId, editAssetPricing.month, Number(editAssetPricing.basePrice), Number(editAssetPricing.cleaningFee));
+                      setEditAssetPricing(null); setMsg("Prezzo aggiornato"); refresh();
+                    }}>Salva</button>
+                    <button style={{ ...btn(), flex: 1 }} onClick={() => setEditAssetPricing(null)}>Annulla</button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -4087,9 +4352,10 @@ export default function Home() {
   };
 
   const handleReset = async () => {
+    if (!user || user.role !== "admin") return;
     if (!confirm("Sicuro di voler resettare tutto? I dati verranno riportati allo stato iniziale.")) return;
     setLoading(true);
-    const res = await resetDatabase();
+    const res = await resetDatabase(user.id);
     if (!res.success) {
       alert("Errore reset: " + res.error);
     } else {

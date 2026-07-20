@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
 
 // --- HELPERS ---
@@ -9,8 +9,16 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const hashPassword = (password: string) => createHash("sha256").update(password).digest("hex");
 
 // --- INITIALIZATION ---
-export async function resetDatabase() {
+export async function resetDatabase(adminUserId: string) {
   try {
+    // Operazione distruttiva (cancella tutte le tabelle): verifica lato server che
+    // il chiamante sia davvero un admin attivo, non basta che il pulsante sia
+    // nascosto nella UI — una Server Action resta raggiungibile direttamente.
+    const caller = await db.execute({ sql: "SELECT role, status FROM users WHERE id = ?", args: [adminUserId] });
+    const callerRow = caller.rows[0] as any;
+    if (!callerRow || callerRow.role !== "admin" || callerRow.status !== "active") {
+      return { success: false, error: "Non autorizzato." };
+    }
     await db.execute("DROP TABLE IF EXISTS users");
     await db.execute("DROP TABLE IF EXISTS properties");
     await db.execute("DROP TABLE IF EXISTS rooms");
@@ -156,12 +164,12 @@ export async function getDashboardData(userId?: string, role?: string) {
 
     if (role === "admin") {
       // Admin sees everything
-      properties = await db.execute("SELECT * FROM properties");
+      properties = await db.execute("SELECT id, owner_id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, pdf_document, pdf_name, description_i18n FROM properties");
       rooms = await db.execute("SELECT * FROM rooms");
       pricing = await db.execute("SELECT * FROM pricing");
       bookings = await db.execute("SELECT * FROM bookings ORDER BY created_at DESC");
     } else if (role === "owner" && userId) {
-      properties = await db.execute({ sql: "SELECT * FROM properties WHERE owner_id = ?", args: [userId] });
+      properties = await db.execute({ sql: "SELECT id, owner_id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, pdf_document, pdf_name, description_i18n FROM properties WHERE owner_id = ?", args: [userId] });
       const pIds = properties.rows.map((p: any) => p.id);
       if (pIds.length > 0) {
         rooms = await db.execute(`SELECT * FROM rooms WHERE property_id IN (${pIds.map(() => '?').join(',')})`, pIds);
@@ -177,7 +185,7 @@ export async function getDashboardData(userId?: string, role?: string) {
         const ownerCollabs = await db.execute({ sql: "SELECT property_id FROM collaborations WHERE concierge_nickname = ?", args: [ownerNick] });
         const ownerCollabPIds = ownerCollabs.rows.map((c: any) => c.property_id);
         if (ownerCollabPIds.length > 0) {
-          const collabPropsRes = await db.execute(`SELECT * FROM properties WHERE id IN (${ownerCollabPIds.map(() => '?').join(',')})`, ownerCollabPIds);
+          const collabPropsRes = await db.execute(`SELECT id, owner_id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, pdf_document, pdf_name, description_i18n FROM properties WHERE id IN (${ownerCollabPIds.map(() => '?').join(',')})`, ownerCollabPIds);
           collaboratedProperties = collabPropsRes.rows;
           const collabRoomsRes = await db.execute(`SELECT * FROM rooms WHERE property_id IN (${ownerCollabPIds.map(() => '?').join(',')})`, ownerCollabPIds);
           collaboratedRooms = collabRoomsRes.rows;
@@ -196,7 +204,7 @@ export async function getDashboardData(userId?: string, role?: string) {
       const collabs = await db.execute({ sql: "SELECT property_id FROM collaborations WHERE concierge_nickname = ?", args: [nick] });
       const pIds = collabs.rows.map((c: any) => c.property_id);
       if (pIds.length > 0) {
-        properties = await db.execute(`SELECT * FROM properties WHERE id IN (${pIds.map(() => '?').join(',')})`, pIds);
+        properties = await db.execute(`SELECT id, owner_id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, pdf_document, pdf_name, description_i18n FROM properties WHERE id IN (${pIds.map(() => '?').join(',')})`, pIds);
         rooms = await db.execute(`SELECT * FROM rooms WHERE property_id IN (${pIds.map(() => '?').join(',')})`, pIds);
         const rIds = rooms.rows.map((r: any) => r.id);
         if (rIds.length > 0) {
@@ -224,7 +232,7 @@ export async function getDashboardData(userId?: string, role?: string) {
       }
 
       if (allPIds.length > 0) {
-        properties = await db.execute(`SELECT * FROM properties WHERE id IN (${allPIds.map(() => '?').join(',')})`, allPIds);
+        properties = await db.execute(`SELECT id, owner_id, name, location, description, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, pdf_document, pdf_name, description_i18n FROM properties WHERE id IN (${allPIds.map(() => '?').join(',')})`, allPIds);
         rooms = await db.execute(`SELECT * FROM rooms WHERE property_id IN (${allPIds.map(() => '?').join(',')})`, allPIds);
         const rIds = rooms.rows.map((r: any) => r.id);
         if (rIds.length > 0) {
@@ -932,6 +940,25 @@ export async function registerUser(
 }
 
 // --- PUBLIC LISTING (no auth required) ---
+// Caso pubblico standard (nessun referral): risultato quasi identico ad ogni
+// richiesta, quindi lo teniamo in cache per qualche secondo così le visite
+// ripetute non generano nemmeno una query verso Turso. Le mutazioni (admin/owner)
+// restano visibili al più entro questa finestra, un compromesso ragionevole
+// per una vetrina pubblica a basso tasso di modifica.
+const getCachedPublicListings = unstable_cache(
+  async () => {
+    const propertiesSQL = "SELECT id, name, location, description, description_i18n, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
+    const [properties, rooms, pricing] = await Promise.all([
+      db.execute(propertiesSQL),
+      db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms FROM rooms ORDER BY name ASC"),
+      db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id"),
+    ]);
+    return { properties: properties.rows, rooms: rooms.rows, pricing: pricing.rows };
+  },
+  ["public-listings"],
+  { revalidate: 30 }
+);
+
 export async function getPublicListings(referralCode?: string) {
   try {
     await initDatabase();
@@ -941,16 +968,24 @@ export async function getPublicListings(referralCode?: string) {
       const refUser = await db.execute({ sql: "SELECT id FROM users WHERE nickname = ? AND status = 'active'", args: [referralCode.toLowerCase().trim()] });
       showAll = refUser.rows.length > 0;
     }
+
+    if (!showAll) {
+      const cached = await getCachedPublicListings();
+      return { ...cached, referralValid: false };
+    }
+
     // Solo la cover (prima foto, colonna dedicata cover_image) va nella lista pubblica: la
     // galleria completa si carica on-demand via getPropertyGallery quando l'utente apre il
     // dettaglio di un asset. Usare una colonna dedicata invece di json_extract(image, '$[0]')
     // evita che il DB debba parsare l'intero blob JSON (anche multi-MB) solo per estrarne il primo elemento.
-    const propertiesSQL = showAll
-      ? "SELECT id, name, location, description, description_i18n, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties ORDER BY name ASC"
-      : "SELECT id, name, location, description, description_i18n, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
-    const properties = await db.execute(propertiesSQL);
-    const rooms = await db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms FROM rooms ORDER BY name ASC");
-    const pricing = await db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id");
+    const propertiesSQL = "SELECT id, name, location, description, description_i18n, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties ORDER BY name ASC";
+    // Query indipendenti lanciate in parallelo invece che in sequenza: il costo
+    // è quello della più lenta delle tre, non la somma dei tre round-trip.
+    const [properties, rooms, pricing] = await Promise.all([
+      db.execute(propertiesSQL),
+      db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms FROM rooms ORDER BY name ASC"),
+      db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id"),
+    ]);
     return {
       properties: properties.rows,
       rooms: rooms.rows,
