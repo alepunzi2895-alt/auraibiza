@@ -4,6 +4,19 @@ import { db } from "@/lib/db";
 import { revalidatePath, unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
+import sharp from "sharp";
+
+// Miniatura leggera (usata solo nella lista pubblica /home) generata una volta
+// alla scrittura, non ad ogni lettura: evita di ritrasferire la cover a piena
+// risoluzione (spesso centinaia di KB) per ogni proprietà ad ogni caricamento.
+async function makeThumbnail(dataUri: string): Promise<string | null> {
+  try {
+    const base64 = dataUri.includes(",") ? dataUri.split(",")[1] : dataUri;
+    const buf = Buffer.from(base64, "base64");
+    const out = await sharp(buf).resize({ width: 320, withoutEnlargement: true }).jpeg({ quality: 55 }).toBuffer();
+    return `data:image/jpeg;base64,${out.toString("base64")}`;
+  } catch (_e) { return null; }
+}
 
 // --- HELPERS ---
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -104,6 +117,7 @@ export async function initDatabase() {
       "ALTER TABLE rooms ADD COLUMN bedrooms INTEGER",
       "ALTER TABLE rooms ADD COLUMN bathrooms INTEGER",
       "ALTER TABLE properties ADD COLUMN description_i18n TEXT",
+      "ALTER TABLE properties ADD COLUMN thumbnail TEXT",
     ];
     for (const sql of migrations) {
       try { await db.execute(sql); } catch (_e) {}
@@ -489,7 +503,8 @@ export async function updatePropertyImage(id: string, base64: string) {
       try { images = current.startsWith('[') ? JSON.parse(current) : [current]; } catch (_e) { images = [current]; }
     }
     images.push(base64);
-    await db.execute({ sql: "UPDATE properties SET image = ?, cover_image = ? WHERE id = ?", args: [JSON.stringify(images), images[0], id] });
+    const thumbnail = await makeThumbnail(images[0]);
+    await db.execute({ sql: "UPDATE properties SET image = ?, cover_image = ?, thumbnail = ? WHERE id = ?", args: [JSON.stringify(images), images[0], thumbnail, id] });
     revalidatePath("/");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
@@ -504,7 +519,8 @@ export async function removePropertyImage(id: string, index: number) {
       try { images = current.startsWith('[') ? JSON.parse(current) : [current]; } catch (_e) { images = [current]; }
     }
     images.splice(index, 1);
-    await db.execute({ sql: "UPDATE properties SET image = ?, cover_image = ? WHERE id = ?", args: [images.length > 0 ? JSON.stringify(images) : null, images[0] || null, id] });
+    const thumbnail = images[0] ? await makeThumbnail(images[0]) : null;
+    await db.execute({ sql: "UPDATE properties SET image = ?, cover_image = ?, thumbnail = ? WHERE id = ?", args: [images.length > 0 ? JSON.stringify(images) : null, images[0] || null, thumbnail, id] });
     revalidatePath("/");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
@@ -957,15 +973,32 @@ export async function registerUser(
 // ripetute non generano nemmeno una query verso Turso. Le mutazioni (admin/owner)
 // restano visibili al più entro questa finestra, un compromesso ragionevole
 // per una vetrina pubblica a basso tasso di modifica.
+// Turso impiega ~1-1.7s PER RIGA quando una colonna TEXT di dimensioni non
+// banali (qui: thumbnail) viene letta in una scansione multi-riga — anche
+// dopo aver ridotto le thumbnail a poche decine di KB e aver indicizzato ogni
+// filtro coinvolto (verificato empiricamente: query altrimenti identiche
+// passano da 30-45s a <100ms togliendo solo la colonna thumbnail dalla
+// SELECT). Fetch paralleli riga-per-riga sulla singola PK, invece, restano
+// ~90ms l'uno indipendentemente da quante righe servono in totale: qui
+// carichiamo prima i metadati (nessun blob) e poi le thumbnail con query
+// singole in parallelo, molto più veloce della scansione multi-riga.
+async function attachThumbnails(propertyRows: any[]): Promise<any[]> {
+  const results = await Promise.all(
+    propertyRows.map(p => db.execute({ sql: "SELECT thumbnail FROM properties WHERE id = ?", args: [p.id] }))
+  );
+  return propertyRows.map((p, i) => ({ ...p, image: (results[i].rows[0] as any)?.thumbnail || null }));
+}
+
 const getCachedPublicListings = unstable_cache(
   async () => {
-    const propertiesSQL = "SELECT id, name, location, description, description_i18n, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 OR is_public IS NULL ORDER BY name ASC";
-    const [properties, rooms, pricing] = await Promise.all([
+    const propertiesSQL = "SELECT id, name, location, description, description_i18n, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 ORDER BY name ASC";
+    const [propertiesRes, rooms, pricing] = await Promise.all([
       db.execute(propertiesSQL),
       db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms FROM rooms ORDER BY name ASC"),
       db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id"),
     ]);
-    return { properties: properties.rows, rooms: rooms.rows, pricing: pricing.rows };
+    const properties = await attachThumbnails(propertiesRes.rows as any[]);
+    return { properties, rooms: rooms.rows, pricing: pricing.rows };
   },
   ["public-listings"],
   { revalidate: 30 }
@@ -986,20 +1019,22 @@ export async function getPublicListings(referralCode?: string) {
       return { ...cached, referralValid: false };
     }
 
-    // Solo la cover (prima foto, colonna dedicata cover_image) va nella lista pubblica: la
-    // galleria completa si carica on-demand via getPropertyGallery quando l'utente apre il
-    // dettaglio di un asset. Usare una colonna dedicata invece di json_extract(image, '$[0]')
-    // evita che il DB debba parsare l'intero blob JSON (anche multi-MB) solo per estrarne il primo elemento.
-    const propertiesSQL = "SELECT id, name, location, description, description_i18n, cover_image as image, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties ORDER BY name ASC";
+    // Solo la cover (thumbnail dedicata, generata una volta alla scrittura) va nella
+    // lista pubblica: la galleria completa si carica on-demand via getPropertyGallery
+    // quando l'utente apre il dettaglio di un asset. Vedi attachThumbnails() sopra per
+    // il motivo per cui le thumbnail vengono recuperate con fetch paralleli per riga
+    // invece che nella SELECT principale.
+    const propertiesSQL = "SELECT id, name, location, description, description_i18n, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties ORDER BY name ASC";
     // Query indipendenti lanciate in parallelo invece che in sequenza: il costo
     // è quello della più lenta delle tre, non la somma dei tre round-trip.
-    const [properties, rooms, pricing] = await Promise.all([
+    const [propertiesRes, rooms, pricing] = await Promise.all([
       db.execute(propertiesSQL),
       db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms FROM rooms ORDER BY name ASC"),
       db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id"),
     ]);
+    const properties = await attachThumbnails(propertiesRes.rows as any[]);
     return {
-      properties: properties.rows,
+      properties,
       rooms: rooms.rows,
       pricing: pricing.rows,
       referralValid: showAll,

@@ -1241,43 +1241,83 @@ export default function LandingPage() {
         </div>
       )}
 
-      {/* --- Booking Assistant (chat) --- */}
+      {/* --- Aura AI Assistant (chat) --- */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes auraFabPulse { 0% { box-shadow: 0 0 0 0 rgba(200,169,110,0.55); } 100% { box-shadow: 0 0 0 18px rgba(200,169,110,0); } }
+        @keyframes auraDotBounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.5; } 40% { transform: translateY(-4px); opacity: 1; } }
+        @keyframes auraFabSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}} />
+
       <div
         onClick={() => setAssistantOpen(o => !o)}
         style={{
-          position: "fixed", bottom: 25, right: 25, width: 60, height: 60,
-          background: `linear-gradient(135deg, ${C.goldDark}, ${C.gold})`,
-          borderRadius: "50%", cursor: "pointer", display: "flex", justifyContent: "center",
-          alignItems: "center", boxShadow: "0 10px 30px rgba(0,0,0,0.4)", zIndex: 1000,
+          position: "fixed", bottom: 25, right: 25, width: 62, height: 62,
+          borderRadius: "50%", cursor: "pointer", zIndex: 1000,
         }}
         title={t(lang, "assistant_fab_label")}
       >
-        <span style={{ fontSize: 26 }}>{assistantOpen ? "✕" : "💬"}</span>
+        {!assistantOpen && (
+          <div style={{ position: "absolute", inset: 0, borderRadius: "50%", animation: "auraFabPulse 2.4s ease-out infinite" }} />
+        )}
+        <div style={{
+          position: "absolute", inset: 0, borderRadius: "50%",
+          background: `conic-gradient(from 180deg, ${C.gold}, ${C.goldLight}, ${C.goldDark}, ${C.gold})`,
+          padding: 2, boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+        }}>
+          <div style={{
+            width: "100%", height: "100%", borderRadius: "50%", background: C.bg,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <span style={{ fontSize: 24, filter: assistantOpen ? "none" : "drop-shadow(0 0 6px rgba(232,213,168,0.7))" }}>
+              {assistantOpen ? "✕" : "✨"}
+            </span>
+          </div>
+        </div>
       </div>
 
       {assistantOpen && (
         <div style={{
-          position: "fixed", bottom: 95, right: 25, width: 340, maxWidth: "calc(100vw - 32px)",
-          height: 480, maxHeight: "calc(100vh - 140px)", background: C.surface,
-          border: `1px solid ${C.borderGold}`, borderRadius: 14, boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+          position: "fixed", bottom: 97, right: 25, width: 350, maxWidth: "calc(100vw - 32px)",
+          height: 500, maxHeight: "calc(100vh - 140px)",
+          background: "rgba(16,20,28,0.82)", backdropFilter: "blur(24px) saturate(1.3)",
+          border: `1px solid ${C.borderGold}`, borderRadius: 18, boxShadow: "0 24px 70px rgba(0,0,0,0.65)",
           zIndex: 999, display: "flex", flexDirection: "column", overflow: "hidden",
         }}>
-          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 20 }}>💬</span>
-            <span style={{ fontFamily: FONT, fontSize: 16, color: C.goldLight }}>{t(lang, "assistant_fab_label")}</span>
+          <div style={{
+            padding: "16px 18px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 12,
+            background: `linear-gradient(135deg, ${C.goldGlow}, transparent)`,
+          }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+              background: `linear-gradient(135deg, ${C.goldDark}, ${C.gold})`,
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17,
+              boxShadow: "0 4px 14px rgba(200,169,110,0.35)",
+            }}>✨</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 9, letterSpacing: "2px", color: C.gold, textTransform: "uppercase", fontFamily: FONT_B, fontWeight: 700 }}>Aura AI</div>
+              <div style={{ fontFamily: FONT, fontSize: 17, color: C.goldLight, lineHeight: 1.1 }}>{t(lang, "assistant_fab_label")}</div>
+            </div>
+            <div onClick={() => setAssistantOpen(false)} style={{ cursor: "pointer", color: C.textDim, fontSize: 16, padding: 4 }}>✕</div>
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
             {assistantMessages.length === 0 && (
               <div>
-                <div style={{ background: C.surfaceAlt, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, lineHeight: 1.5, alignSelf: "flex-start", maxWidth: "90%" }}>
+                <div style={{
+                  background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, borderRadius: "4px 14px 14px 14px",
+                  padding: "12px 14px", fontSize: 13, color: C.text, lineHeight: 1.5, alignSelf: "flex-start", maxWidth: "92%",
+                }}>
                   {t(lang, "assistant_greeting")}
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
                   {["assistant_suggestion_1", "assistant_suggestion_2", "assistant_suggestion_3", "assistant_suggestion_4"].map(key => (
                     <button
                       key={key}
-                      style={{ ...btn("outline"), textAlign: "left", fontSize: 11, padding: "8px 12px", textTransform: "none", letterSpacing: 0, fontWeight: 400 }}
+                      style={{
+                        background: "transparent", border: `1px solid ${C.borderGold}`, color: C.goldLight,
+                        borderRadius: 20, padding: "7px 14px", fontSize: 11, fontFamily: FONT_B, cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
                       onClick={() => handleAssistantSend(t(lang, key))}
                     >
                       {t(lang, key)}
@@ -1290,9 +1330,10 @@ export default function LandingPage() {
             {assistantMessages.map((m, i) => (
               <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
                 <div style={{
-                  background: m.role === "user" ? C.goldGlow : C.surfaceAlt,
-                  border: m.role === "user" ? `1px solid ${C.borderGold}` : "none",
-                  borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, lineHeight: 1.5, maxWidth: "90%", whiteSpace: "pre-wrap",
+                  background: m.role === "user" ? `linear-gradient(135deg, ${C.goldDark}22, ${C.gold}22)` : "rgba(255,255,255,0.04)",
+                  border: m.role === "user" ? `1px solid ${C.borderGold}` : `1px solid ${C.border}`,
+                  borderRadius: m.role === "user" ? "14px 4px 14px 14px" : "4px 14px 14px 14px",
+                  padding: "10px 13px", fontSize: 13, color: C.text, lineHeight: 1.5, maxWidth: "92%", whiteSpace: "pre-wrap",
                 }}>
                   {m.text}
                 </div>
@@ -1300,12 +1341,15 @@ export default function LandingPage() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8, width: "100%" }}>
                     <div style={{ fontSize: 10, color: C.textDim, textTransform: "uppercase", letterSpacing: "1px" }}>{t(lang, "assistant_results_heading")}</div>
                     {m.matches.map((match: any, mi: number) => (
-                      <div key={mi} style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10 }}>
+                      <div key={mi} style={{
+                        background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 12, padding: 12,
+                        transition: "border-color 0.2s",
+                      }}>
                         <div style={{ fontSize: 13, color: C.goldLight, fontFamily: FONT }}>{match.propertyName}{match.roomName ? ` — ${match.roomName}` : ""}</div>
-                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{match.location}</div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                          <span style={{ fontSize: 12, color: C.text }}>
-                            {match.pricePerNight != null ? `${t(lang, "from_price")} €${match.pricePerNight}${unitSuffix(lang, match.assetType)}` : ""}
+                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>📍 {match.location}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                          <span style={{ fontSize: 13, color: C.gold, fontFamily: FONT }}>
+                            {match.pricePerNight != null ? <>{t(lang, "from_price")} €{match.pricePerNight}<span style={{ fontSize: 10, color: C.textMuted }}>{unitSuffix(lang, match.assetType)}</span></> : ""}
                           </span>
                           <button style={{ ...btn("gold"), padding: "6px 14px", fontSize: 10 }} onClick={() => handleAssistantBook(match)}>
                             {t(lang, "assistant_view_details")}
@@ -1322,20 +1366,30 @@ export default function LandingPage() {
             ))}
 
             {assistantLoading && (
-              <div style={{ fontSize: 12, color: C.textDim, fontStyle: "italic" }}>{t(lang, "assistant_thinking")}</div>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6, alignSelf: "flex-start",
+                background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, borderRadius: "4px 14px 14px 14px", padding: "11px 16px",
+              }}>
+                {[0, 1, 2].map(i => (
+                  <span key={i} style={{
+                    width: 5, height: 5, borderRadius: "50%", background: C.gold,
+                    display: "inline-block", animation: `auraDotBounce 1.2s ease-in-out ${i * 0.15}s infinite`,
+                  }} />
+                ))}
+              </div>
             )}
           </div>
 
           <div style={{ padding: 12, borderTop: `1px solid ${C.border}`, display: "flex", gap: 8 }}>
             <input
-              style={{ ...inputStyle, flex: 1 }}
+              style={{ ...inputStyle, flex: 1, borderRadius: 20 }}
               value={assistantInput}
               onChange={e => setAssistantInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleAssistantSend(); }}
               placeholder={t(lang, "assistant_placeholder")}
               disabled={assistantLoading}
             />
-            <button style={{ ...btn("gold"), padding: "10px 16px" }} onClick={() => handleAssistantSend()} disabled={assistantLoading}>
+            <button style={{ ...btn("gold"), padding: "10px 18px", borderRadius: 20 }} onClick={() => handleAssistantSend()} disabled={assistantLoading}>
               {t(lang, "assistant_send")}
             </button>
           </div>
