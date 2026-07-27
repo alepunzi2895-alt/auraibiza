@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, CSSProperties } from "react";
 import "leaflet/dist/leaflet.css";
-import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf, getPropertyGallery, chatBookingAssistant } from "./actions";
+import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf, getPropertyGallery, chatBookingAssistant, getPropertyThumbnails } from "./actions";
 import { LANGUAGES, Lang, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, assetTypeLabel, localizedDescription } from "@/lib/i18n";
 
 // ─── Design tokens (standalone, no import from platform) ─────────────────────
@@ -206,12 +206,13 @@ function PublicCalendar({ roomId, onRangeSelect, selectedRange, assetType, lang 
 // ─── Property Map View ─────────────────────────────────────────────────────────
 const IBIZA_CENTER: [number, number] = [38.9067, 1.4206];
 
-function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect, lang }: {
+function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect, lang, thumbnails }: {
   properties: any[];
   getRoomsForProperty: (id: string) => any[];
   getPricing: (roomId: string) => any;
   onSelect: (prop: any) => void;
   lang: Lang;
+  thumbnails: Record<string, string | null>;
 }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
@@ -246,8 +247,7 @@ function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect
         const lng = parseFloat(prop.longitude);
         bounds.push([lat, lng]);
         const rooms = getRoomsForProperty(prop.id);
-        const images = parseImages(prop.image);
-        const cover = images[0];
+        const cover = thumbnails[prop.id];
         const minPrice = rooms.reduce((min: number, r: any) => {
           const pr = getPricing(r.id);
           const p = pr?.min_price ?? Infinity;
@@ -277,7 +277,7 @@ function PropertyMapView({ properties, getRoomsForProperty, getPricing, onSelect
       }
     });
     return () => { cancelled = true; };
-  }, [geoProperties, getRoomsForProperty, getPricing, onSelect, lang]);
+  }, [geoProperties, getRoomsForProperty, getPricing, onSelect, lang, thumbnails]);
 
   useEffect(() => {
     return () => {
@@ -385,7 +385,8 @@ export default function LandingPage() {
   // Carica la galleria completa dell'asset solo quando si apre il suo dettaglio
   useEffect(() => {
     if (!detailModal) { setDetailGallery(null); return; }
-    setDetailGallery(parseImages(detailModal.image)); // intanto mostra la cover già in memoria
+    const cover = thumbnails[detailModal.id];
+    setDetailGallery(cover ? [cover] : []); // intanto mostra la thumbnail già in memoria
     getPropertyGallery(detailModal.id).then(res => {
       if (res.image) setDetailGallery(parseImages(res.image));
     });
@@ -394,7 +395,7 @@ export default function LandingPage() {
   // Navigazione lightbox da tastiera (frecce + Escape)
   useEffect(() => {
     if (lightboxIndex === null) return;
-    const images = detailGallery || parseImages(detailModal?.image);
+    const images = detailGallery || (thumbnails[detailModal?.id] ? [thumbnails[detailModal!.id] as string] : []);
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") setLightboxIndex(null);
       else if (e.key === "ArrowRight") setLightboxIndex(i => i === null ? i : (i + 1) % images.length);
@@ -431,6 +432,28 @@ export default function LandingPage() {
       return true;
     });
   }, [listings.properties, listings.rooms, activeCat, searchQuery, minGuests, minBedrooms, minBathrooms]);
+
+  // Paginazione: la home carica solo 6 asset alla volta invece di scaricare
+  // le foto di tutto il catalogo ad ogni visita.
+  const ITEMS_PER_PAGE = 6;
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [activeCat, searchQuery, minGuests, minBedrooms, minBathrooms]);
+  const totalPages = Math.max(1, Math.ceil(filteredProperties.length / ITEMS_PER_PAGE));
+  const paginatedProperties = useMemo(
+    () => filteredProperties.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE),
+    [filteredProperties, page]
+  );
+
+  // Le thumbnail non arrivano più con la lista: si caricano solo per gli id
+  // effettivamente visibili (pagina corrente in griglia, tutti in vista mappa).
+  const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
+  useEffect(() => {
+    const visibleIds = (viewMode === "map" ? filteredProperties : paginatedProperties).map((p: any) => p.id);
+    const missing = visibleIds.filter((id: string) => !(id in thumbnails));
+    if (missing.length === 0) return;
+    getPropertyThumbnails(missing).then(map => setThumbnails(prev => ({ ...prev, ...map })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, paginatedProperties, filteredProperties]);
 
   const getRoomsForProperty = (propId: string) =>
     listings.rooms.filter((r: any) => r.property_id === propId);
@@ -734,6 +757,7 @@ export default function LandingPage() {
             getRoomsForProperty={getRoomsForProperty}
             getPricing={getPricing}
             lang={lang}
+            thumbnails={thumbnails}
             onSelect={(prop) => {
               setDetailModal(prop);
               setDetailRoom(getRoomsForProperty(prop.id)[0] || null);
@@ -741,11 +765,11 @@ export default function LandingPage() {
             }}
           />
         ) : (
+          <>
           <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
-            {filteredProperties.map((prop: any) => {
+            {paginatedProperties.map((prop: any) => {
               const rooms = getRoomsForProperty(prop.id);
-              const images = parseImages(prop.image);
-              const coverImg = images[0];
+              const coverImg = thumbnails[prop.id];
               const minPrice = rooms.reduce((min: number, r: any) => {
                 const pr = getPricing(r.id);
                 const p = pr?.min_price ?? Infinity;
@@ -833,6 +857,38 @@ export default function LandingPage() {
               );
             })}
           </div>
+          {totalPages > 1 && (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 48 }}>
+              <button
+                style={{ ...btn("outline"), padding: "8px 16px", opacity: page === 1 ? 0.35 : 1, cursor: page === 1 ? "default" : "pointer" }}
+                onClick={() => page > 1 && setPage(p => p - 1)}
+                disabled={page === 1}
+              >
+                ◂
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  style={{
+                    width: 36, height: 36, borderRadius: "50%", border: `1px solid ${n === page ? C.gold : C.border}`,
+                    background: n === page ? `linear-gradient(135deg, ${C.goldDark}, ${C.gold})` : "transparent",
+                    color: n === page ? "#080B0F" : C.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                style={{ ...btn("outline"), padding: "8px 16px", opacity: page === totalPages ? 0.35 : 1, cursor: page === totalPages ? "default" : "pointer" }}
+                onClick={() => page < totalPages && setPage(p => p + 1)}
+                disabled={page === totalPages}
+              >
+                ▸
+              </button>
+            </div>
+          )}
+          </>
         )}
       </section>
 
