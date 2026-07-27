@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, CSSProperties } from "react";
 import "leaflet/dist/leaflet.css";
-import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf, getPropertyGallery, chatBookingAssistant, getPropertyThumbnails } from "./actions";
+import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf, getPropertyGallery, chatBookingAssistant, getPropertyThumbnails, getPropertyCoverImages } from "./actions";
 import { LANGUAGES, Lang, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, assetTypeLabel, localizedDescription } from "@/lib/i18n";
 
 // ─── Design tokens (standalone, no import from platform) ─────────────────────
@@ -461,6 +461,24 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode, paginatedProperties, filteredProperties]);
 
+  // Una volta che l'utente resta sulla pagina qualche istante, sostituiamo la
+  // thumbnail leggera con la foto in piena qualità — senza rallentare il
+  // primo caricamento. Se l'utente cambia pagina/vista velocemente, il
+  // timer viene annullato e non si scarica nulla per le pagine "di passaggio".
+  const [highResImages, setHighResImages] = useState<Record<string, string | null>>({});
+  useEffect(() => {
+    const visibleIds = (viewMode === "map" ? filteredProperties : paginatedProperties).map((p: any) => p.id);
+    const missing = visibleIds.filter((id: string) => !(id in highResImages));
+    if (missing.length === 0) return;
+    const timer = setTimeout(() => {
+      getPropertyCoverImages(missing).then(map => setHighResImages(prev => ({ ...prev, ...map })));
+    }, 1200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, paginatedProperties, filteredProperties]);
+
+  const getDisplayImage = (id: string) => highResImages[id] || thumbnails[id];
+
   const getRoomsForProperty = (propId: string) =>
     listings.rooms.filter((r: any) => r.property_id === propId);
 
@@ -499,6 +517,7 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
         ::selection { background: ${C.gold}33; }
         ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: ${C.surface}; } ::-webkit-scrollbar-thumb { background: ${C.goldDark}; border-radius: 3px; }
         @keyframes fadeUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes auraFadeIn { from { opacity:0.3; } to { opacity:1; } }
         @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
         @keyframes pulse { 0%,100% { opacity:.6; } 50% { opacity:1; } }
         .hero-text { animation: fadeUp 0.8s ease both; }
@@ -768,7 +787,7 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
             getRoomsForProperty={getRoomsForProperty}
             getPricing={getPricing}
             lang={lang}
-            thumbnails={thumbnails}
+            thumbnails={{ ...thumbnails, ...highResImages }}
             onSelect={(prop) => {
               setDetailModal(prop);
               setDetailRoom(getRoomsForProperty(prop.id)[0] || null);
@@ -780,7 +799,8 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
           <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
             {paginatedProperties.map((prop: any) => {
               const rooms = getRoomsForProperty(prop.id);
-              const coverImg = thumbnails[prop.id];
+              const coverImg = getDisplayImage(prop.id);
+              const isHighRes = !!highResImages[prop.id];
               const minPrice = rooms.reduce((min: number, r: any) => {
                 const pr = getPricing(r.id);
                 const p = pr?.min_price ?? Infinity;
@@ -801,7 +821,12 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
                   {/* Image */}
                   <div style={{ position: "relative", height: 220, background: C.surfaceAlt, overflow: "hidden" }}>
                     {coverImg ? (
-                      <img src={coverImg} alt={prop.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <img
+                        key={isHighRes ? "hi" : "lo"}
+                        src={coverImg}
+                        alt={prop.name}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", animation: isHighRes ? "auraFadeIn 0.4s ease" : undefined }}
+                      />
                     ) : (
                       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56, opacity: 0.3 }}>
                         {assetIcon[prop.asset_type] || "🏠"}

@@ -1028,6 +1028,23 @@ export async function getPropertyThumbnails(ids: string[]): Promise<Record<strin
   }
 }
 
+// Foto di copertina a piena qualità: la griglia mostra prima la thumbnail
+// leggera (getPropertyThumbnails) e sostituisce l'immagine con questa non
+// appena l'utente resta sulla pagina qualche istante, senza rallentare il
+// primo caricamento.
+export async function getPropertyCoverImages(ids: string[]): Promise<Record<string, string | null>> {
+  try {
+    const results = await Promise.all(
+      ids.map(id => db.execute({ sql: "SELECT cover_image FROM properties WHERE id = ?", args: [id] }))
+    );
+    const map: Record<string, string | null> = {};
+    ids.forEach((id, i) => { map[id] = (results[i].rows[0] as any)?.cover_image || null; });
+    return map;
+  } catch (_error) {
+    return {};
+  }
+}
+
 export async function getPublicListings(referralCode?: string) {
   try {
     await initDatabase();
