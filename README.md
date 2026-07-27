@@ -23,12 +23,11 @@ Apri [http://localhost:3000](http://localhost:3000)
 
 ## Account di default (seed automatico al primo avvio)
 
-| Nickname    | Ruolo  | Password    |
-|-------------|--------|-------------|
-| alessandro  | admin  | Gianni95.   |
-| silvia      | owner  | password123 |
+| Nickname    | Ruolo  |
+|-------------|--------|
+| alessandro  | admin  |
 
-Il seed viene eseguito automaticamente solo se il DB è vuoto.
+Il seed viene eseguito automaticamente solo se il DB è vuoto. Password disponibile solo internamente, non in chiaro nel repo.
 
 ## Stack
 

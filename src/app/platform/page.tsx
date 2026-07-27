@@ -24,7 +24,7 @@ import {
   addAgentToConcierge, removeAgentFromConcierge, updateAgentCommissionRate,
   setRoomIcalUrl, syncRoomIcal, getPropertyGallery,
 } from "../actions";
-import { LANGUAGES, DEFAULT_LANG, t, monthNames, type Lang } from "@/lib/i18n";
+import { LANGUAGES, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, isDayBasedAsset, type Lang } from "@/lib/i18n";
 
 const IBIZA_CENTER: [number, number] = [38.9067, 1.4206];
 
@@ -101,15 +101,6 @@ const ASSET_TYPES = [
   { v: "scooter", l: "🛵 Scooter" },
 ];
 const assetLabel = (type?: string) => ASSET_TYPES.find(a => a.v === type)?.l || "🏠 Appartamento";
-
-// Auto, scooter e barche si prenotano a giorno (non a notte come ville/appartamenti)
-const isDayBasedAsset = (assetType?: string) => assetType === "car" || assetType === "scooter" || assetType === "boat";
-const unitLabel = (assetType: string | undefined, count: number) => {
-  const day = isDayBasedAsset(assetType);
-  if (day) return count === 1 ? "giorno" : "giorni";
-  return count === 1 ? "notte" : "notti";
-};
-const unitSuffix = (assetType?: string) => isDayBasedAsset(assetType) ? "/giorno" : "/notte";
 
 const ASSET_CATEGORIES = [
   { key: "residenze", label: "Residenze", icon: "🏠", types: ["apartment", "villa"], defaultType: "apartment" },
@@ -260,12 +251,12 @@ function LogoFull({ size = 38, isMobile = false }: { size?: number, isMobile?: b
   );
 }
 
-function CalendarView({ 
-  roomId, onSelectRange, selectedRange, mode = "booking", onRefresh, roomBookings, users, allPricing, isMobile = false, onEditBooking
-}: { 
-  roomId: string; onSelectRange?: (r: Range) => void; selectedRange?: Range; 
+function CalendarView({
+  roomId, onSelectRange, selectedRange, mode = "booking", onRefresh, roomBookings, users, allPricing, isMobile = false, onEditBooking, lang = DEFAULT_LANG
+}: {
+  roomId: string; onSelectRange?: (r: Range) => void; selectedRange?: Range;
   mode?: "booking" | "manager"; onRefresh?: () => void; roomBookings?: any[]; users?: User[]; allPricing?: any[];
-  isMobile?: boolean; onEditBooking?: (b: any) => void;
+  isMobile?: boolean; onEditBooking?: (b: any) => void; lang?: Lang;
 }) {
   const [currentMonth, setCurrentMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [availability, setAvailability] = useState<Avail[]>([]);
@@ -280,7 +271,7 @@ function CalendarView({
 
   useEffect(() => {
     if (drafts && Object.keys(drafts).length > 0) {
-      if (!confirm("Hai delle modifiche non salvate. Vuoi abbandonarle?")) return;
+      if (!confirm(t(lang, "p_cal_unsaved_confirm"))) return;
     }
     fetchMonth();
   }, [roomId, currentMonth]);
@@ -331,7 +322,7 @@ function CalendarView({
     onRefresh?.();
   };
 
-  const monthNames = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+  const monthAbbrevs = Array.from({ length: 12 }, (_, i) => t(lang, `month_abbr_${i + 1}`));
 
   return (
     <div>
@@ -341,10 +332,10 @@ function CalendarView({
           setCurrentMonth(m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`);
         }}>◂</button>
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontFamily: FONT, fontSize: 18, color: C.goldLight, lineHeight: 1 }}>{monthNames[monthData.m - 1]} {monthData.y}</div>
+          <div style={{ fontFamily: FONT, fontSize: 18, color: C.goldLight, lineHeight: 1 }}>{monthAbbrevs[monthData.m - 1]} {monthData.y}</div>
           {currentMonthPricing && (
             <div style={{ fontSize: 9, color: C.textDim, marginTop: 4, letterSpacing: "0.5px", textTransform: "uppercase" }}>
-              Prezzo: <span style={{ color: C.gold }}>€{currentMonthPricing.base_price}</span> | Pulizie: <span style={{ color: C.gold }}>€{currentMonthPricing.cleaning_fee}</span>
+              {t(lang, "p_cal_price")}: <span style={{ color: C.gold }}>€{currentMonthPricing.base_price}</span> | {t(lang, "p_cd_cleaning")}: <span style={{ color: C.gold }}>€{currentMonthPricing.cleaning_fee}</span>
             </div>
           )}
         </div>
@@ -354,7 +345,7 @@ function CalendarView({
         }}>▸</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
-        {["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"].map(d => (
+        {dayAbbrevs(lang).map(d => (
           <div key={d} style={{ textAlign: "center", fontSize: 10, color: C.textDim, padding: 4, fontWeight: 600 }}>{d}</div>
         ))}
         {Array.from({ length: monthData.startOffset }).map((_, i) => <div key={`e${i}`} />)}
@@ -415,17 +406,17 @@ function CalendarView({
       {mode === "manager" && Object.keys(drafts).length > 0 && (
         <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
           <button style={btn("gold")} onClick={handleSaveDrafts} disabled={isSaving}>
-            {isSaving ? "Salvataggio in corso..." : `Salva ${Object.keys(drafts).length} modifiche`}
+            {isSaving ? t(lang, "p_cal_saving") : t(lang, "p_cal_save_n_changes", { n: Object.keys(drafts).length })}
           </button>
         </div>
       )}
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16, fontSize: 10, color: C.textDim, justifyContent: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 10, height: 10, background: C.available + "60", borderRadius: 2 }} /> Disponibile</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 10, height: 10, background: C.blocked + "60", borderRadius: 2 }} /> Bloccato</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 10, height: 10, background: C.warning + "90", borderRadius: 2 }} /> In Trattativa</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 10, height: 10, background: C.blocked, borderRadius: 2 }} /> Prenotato</div>
-        {mode === "manager" && <div style={{ color: C.goldLight, marginLeft: 8 }}>• Clicca un giorno per cambiare stato</div>}
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 10, height: 10, background: C.available + "60", borderRadius: 2 }} /> {t(lang, "cal_available")}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 10, height: 10, background: C.blocked + "60", borderRadius: 2 }} /> {t(lang, "p_cal_blocked")}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 10, height: 10, background: C.warning + "90", borderRadius: 2 }} /> {t(lang, "p_cal_pending")}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 10, height: 10, background: C.blocked, borderRadius: 2 }} /> {t(lang, "cal_booked")}</div>
+        {mode === "manager" && <div style={{ color: C.goldLight, marginLeft: 8 }}>{t(lang, "p_cal_click_hint")}</div>}
       </div>
     </div>
   );
@@ -532,7 +523,7 @@ function PdfPreview({ data, onClose }: { data: { booking: Booking; room: Room | 
 
           <div style={{ marginTop: 40, background: "#F9F7F2", padding: 24, borderRadius: 4, border: "1px solid #EEE" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12, fontSize: 15 }}>
-              <span style={{ color: "#666" }}>Soggiorno ({getDaysBetween(booking.start_date, booking.end_date)} {unitLabel(booking.asset_type, getDaysBetween(booking.start_date, booking.end_date))})</span>
+              <span style={{ color: "#666" }}>Soggiorno ({getDaysBetween(booking.start_date, booking.end_date)} {isDayBasedAsset(booking.asset_type) ? (getDaysBetween(booking.start_date, booking.end_date) === 1 ? "giorno" : "giorni") : (getDaysBetween(booking.start_date, booking.end_date) === 1 ? "notte" : "notti")})</span>
               <span style={{ fontWeight: 600 }}>€{((booking.stay_price_total || 0) + (booking.concierge_fee || 0)) || booking.total_price - (booking.cleaning_fee_total || 0)}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 0, fontSize: 15 }}>
@@ -965,7 +956,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
             </div>
             )}
             {selectedRoom && filteredRooms.some((r: any) => r.id === selectedRoom) && (
-            <div style={card}><CalendarView roomId={selectedRoom} onSelectRange={setSelectedRange} selectedRange={selectedRange} roomBookings={data.bookings.filter((b: any) => b.room_id === selectedRoom)} users={data.users} allPricing={data.pricing} /></div>
+            <div style={card}><CalendarView roomId={selectedRoom} onSelectRange={setSelectedRange} selectedRange={selectedRange} roomBookings={data.bookings.filter((b: any) => b.room_id === selectedRoom)} users={data.users} allPricing={data.pricing} lang={lang} /></div>
             )}
             {selectedRange?.start && (
               <div style={{ ...card, borderColor: C.gold + "44" }}>
@@ -1009,7 +1000,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                     })}
                   </select>
                 </div>
-                <CalendarView roomId={selectedRoom} onSelectRange={setSelectedRange} selectedRange={selectedRange} roomBookings={data.bookings.filter((b: any) => b.room_id === selectedRoom)} users={data.users} allPricing={data.pricing} />
+                <CalendarView roomId={selectedRoom} onSelectRange={setSelectedRange} selectedRange={selectedRange} roomBookings={data.bookings.filter((b: any) => b.room_id === selectedRoom)} users={data.users} allPricing={data.pricing} lang={lang} />
               </div>
               <div>
                 <div style={card}>
@@ -1036,7 +1027,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                     <div>
                       <label style={label}>{t(lang, "p_cd_mode")}</label>
                       <select style={sel} value={feeMode} onChange={e => setFeeMode(e.target.value as any)}>
-                        <option value="per_night">{unitSuffix(data.properties.find((p: any) => p.id === currentRoom?.property_id)?.asset_type).replace("/", "€/")}</option>
+                        <option value="per_night">{unitSuffix(lang, data.properties.find((p: any) => p.id === currentRoom?.property_id)?.asset_type).replace("/", "€/")}</option>
                         <option value="percentage">%</option>
                       </select>
                     </div>
@@ -1170,7 +1161,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                           </td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>
                             {formatDate(b.start_date)} → {formatDate(b.end_date)}
-                            <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
+                            <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(lang, b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
                           </td>
                           <td style={{ ...td, color: C.textDim }}>—</td>
                           <td style={{ ...td, color: C.textDim }}>—</td>
@@ -1196,7 +1187,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                         </td>
                         <td style={{ ...td, whiteSpace: "nowrap" }}>
                           {formatDate(b.start_date)} → {formatDate(b.end_date)}
-                          <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
+                          <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(lang, b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
                         </td>
                         <td style={{ ...td, fontWeight: 600, color: C.success }}>€{b.owner_price_total}</td>
                         <td style={{ ...td, color: C.gold, fontSize: 10 }}>
@@ -1219,6 +1210,8 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                         <td style={td}>
                           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                             {b.status === "draft" && <button style={{ ...btn(), fontSize: 10, padding: "4px 10px" }} onClick={() => handleStatusChange(b.id, "sent")}>{t(lang, "p_send_to_client")}</button>}
+                            {b.status === "sent" && <button style={{ ...btn("gold"), fontSize: 10, padding: "4px 10px" }} onClick={() => setPayModal(b)}>{t(lang, "p_od_pm_register_deposit_btn")}</button>}
+                            {b.status === "payment_submitted" && <span style={{ fontSize: 10, color: C.textDim }}>{t(lang, "p_od_pm_awaiting_owner_confirmation")}</span>}
                           </div>
                         </td>
                         <td style={td}>
@@ -1500,6 +1493,73 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
             </div>
           </div>
         )}
+        {payModal && (() => {
+          const accAmt = parseFloat(accontoAmount) || 0;
+          const room = data.rooms.find((r: any) => r.id === payModal.room_id);
+          const property = data.properties.find((p: any) => p.id === room?.property_id);
+          const ownerUser = data.users.find((u: any) => u.id === property?.owner_id);
+          const storno = Math.max(0, accAmt - payModal.concierge_fee);
+          return (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 500, backdropFilter: "blur(8px)" }} onClick={() => setPayModal(null)}>
+              <div style={{ ...card, width: 500, background: C.bg }} onClick={e => e.stopPropagation()}>
+                <h3 style={h3Style}>{t(lang, "p_od_pm_deposit_title")}</h3>
+                <p style={{ fontSize: 12, color: C.textDim, marginTop: -4, marginBottom: 20 }}>{t(lang, "p_od_pm_booking_total")} <strong style={{color: C.gold}}>€{payModal.total_price}</strong></p>
+
+                <div style={{ ...card, background: C.surfaceAlt }}>
+                  <h4 style={{ ...h3Style, fontSize: 13, marginBottom: 12 }}>{t(lang, "p_od_pm_deposit_details_heading")}</h4>
+                  <div style={grid(3)}>
+                    <div>
+                      <label style={label}>{t(lang, "p_od_pm_amount_label")}</label>
+                      <input style={input} type="number" value={accontoAmount} onChange={e => setAccontoAmount(e.target.value)} placeholder="€ 0.00" />
+                    </div>
+                    <div>
+                      <label style={label}>{t(lang, "p_od_pm_date_short")}</label>
+                      <input style={input} type="date" value={accontoDate} onChange={e => setAccontoDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={label}>{t(lang, "p_od_pm_collection_method")}</label>
+                      <select style={sel} value={accontoMethod} onChange={e => setAccontoMethod(e.target.value)}>
+                        <option value="">{t(lang, "p_od_pm_select_placeholder")}</option>
+                        {data.userPaymentMethods
+                          .filter((m: any) => m.user_id === user.id)
+                          .map((m: any) => (
+                            <option key={m.id} value={m.name}>{m.name}</option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {storno > 0 && (
+                    <div style={{ marginTop: 15, paddingTop: 15, borderTop: `1px solid ${C.border}`, fontSize: 10, color: C.textDim }}>
+                       ℹ️ {t(lang, "p_od_pm_storno_incoming_info", { amount: storno.toFixed(2) })}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ ...card, background: C.surfaceAlt, marginTop: 20, borderColor: C.gold + "22" }}>
+                  <div style={{ fontSize: 12, lineHeight: 1.8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>{t(lang, "p_od_pm_your_commission")}</span> <span>€{payModal.concierge_fee}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", color: C.gold }}>
+                      <span>{t(lang, "p_od_pm_retained_commission")}</span>
+                      <strong>€{Math.min(accAmt, payModal.concierge_fee).toFixed(2)}</strong>
+                    </div>
+                    {storno > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", color: C.info }}>
+                        <span>{t(lang, "p_od_pm_transfer_to_owner", { name: ownerUser?.nickname || t(lang, "p_common_owner") })}</span>
+                        <strong>€{storno.toFixed(2)}</strong>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 10, marginTop: 30 }}>
+                  <button style={{ ...btn("gold"), flex: 1 }} onClick={handleRegisterPayment}>{t(lang, "p_od_pm_save_deposit")}</button>
+                  <button style={{ ...btn(), flex: 1 }} onClick={() => setPayModal(null)}>{t(lang, "p_common_cancel")}</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -1633,7 +1693,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
 
   const handleImageUpload = async (roomId: string, file: File) => {
     if (file.size > 20 * 1024 * 1024) {
-      alert("L'immagine è troppo grande. Massimo 20MB.");
+      alert(t(lang, "p_od_image_too_large_20mb"));
       return;
     }
     const reader = new FileReader();
@@ -1643,7 +1703,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
         base64 = await compressImage(base64);
       }
       await updateRoomImage(roomId, base64);
-      setMsg("Foto camera aggiornata con successo.");
+      setMsg(t(lang, "p_od_room_photo_updated"));
       refresh();
     };
     reader.readAsDataURL(file);
@@ -1651,7 +1711,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
   
   const handlePropertyImageUpload = async (propId: string, file: File) => {
     if (file.size > 20 * 1024 * 1024) {
-      alert("L'immagine è troppo grande. Massimo 20MB.");
+      alert(t(lang, "p_od_image_too_large_20mb"));
       return;
     }
     const reader = new FileReader();
@@ -1662,7 +1722,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
       }
       await updatePropertyImage(propId, base64);
       await refreshGallery(propId);
-      setMsg("Foto proprietà aggiornata con successo.");
+      setMsg(t(lang, "p_od_property_photo_updated"));
       refresh();
     };
     reader.readAsDataURL(file);
@@ -1670,18 +1730,18 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
 
   const handlePropertyPdfUpload = async (propId: string, file: File) => {
     if (file.type !== "application/pdf") {
-      alert("Il file deve essere un PDF.");
+      alert(t(lang, "p_ad_file_must_be_pdf"));
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      alert("Il PDF è troppo grande. Massimo 10MB.");
+      alert(t(lang, "p_ad_pdf_too_large_10mb"));
       return;
     }
     const reader = new FileReader();
     reader.onload = async (e) => {
       const base64 = e.target?.result as string;
       await updatePropertyPdf(propId, base64, file.name);
-      setMsg("Scheda PDF aggiornata con successo.");
+      setMsg(t(lang, "p_od_pdf_updated"));
       refresh();
     };
     reader.readAsDataURL(file);
@@ -1700,10 +1760,10 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
       if (val !== 0 && !isNaN(val)) finalAdjs[d] = val;
     });
     const valFee = parseFloat(localFee);
-    setMsg("Salvataggio in corso...");
+    setMsg(t(lang, "p_od_saving_in_progress"));
     await updateBookingPriceAdjustment(adjModal.id, finalAdjs, isNaN(valFee) ? undefined : valFee);
     setAdjModal(null);
-    setMsg("Aggiustamenti e commissione salvati con successo.");
+    setMsg(t(lang, "p_od_adjustments_saved"));
     refresh();
   };
 
@@ -1727,8 +1787,8 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
   }, [selectedRange, selectedRoom, data.pricing, collaboratedPricing]);
 
   const handleCreateBookingOwner = async () => {
-    if (!selectedRange.start || !selectedRange.end || !pricing) return alert("Seleziona le date");
-    if (!clientName.trim()) return alert("Inserisci il nome del cliente");
+    if (!selectedRange.start || !selectedRange.end || !pricing) return alert(t(lang, "p_od_select_dates"));
+    if (!clientName.trim()) return alert(t(lang, "p_od_enter_client_name"));
     const ownerPrice = pricing.baseTotal + pricing.cleaningFee;
     const rawFeeVal = Number(ownerConciergeFee) || 0;
     const conciergeFeeValue = ownerFeeMode === 'percentage'
@@ -1752,7 +1812,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
       fee_value: rawFeeVal,
     });
     // Proprietario crea inizialmente una bozza
-    setMsg("Prenotazione manuale registrata in bozza.");
+    setMsg(t(lang, "p_od_booking_draft_registered"));
     setSelectedRange({ start: null, end: null });
     setClientName(""); setClientSurname(""); setNotes(""); setGuestsCount("1");
     setTab("bookings");
@@ -1766,14 +1826,14 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
   const performDeleteBooking = async (id: string) => {
     await deleteBookingAction(id);
     setDeleteBookingId(null);
-    setMsg("Prenotazione cancellata");
+    setMsg(t(lang, "p_od_booking_cancelled"));
     refresh();
   };
 
-  const handleConfirmOwner = async (id: string) => { await updateBookingStatus(id, "confirmed_owner"); refresh(); setMsg("Confermata, calendario bloccato"); };
+  const handleConfirmOwner = async (id: string) => { await updateBookingStatus(id, "confirmed_owner"); refresh(); setMsg(t(lang, "p_od_confirmed_calendar_locked")); };
 
   const handleRegisterPayment = async () => {
-    if (!accontoAmount) { setMsg("⚠ Inserire l'importo dell'acconto"); return; }
+    if (!accontoAmount) { setMsg(t(lang, "p_od_enter_deposit_amount_warn")); return; }
     
     const acc = parseFloat(accontoAmount) || 0;
     const payments = [];
@@ -1805,16 +1865,16 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
     await submitPaymentProposal(payModal.id, payments);
     setPayModal(null);
     setAccontoAmount("");
-    setMsg("Acconto registrato. In attesa di verifica.");
+    setMsg(t(lang, "p_od_deposit_registered_pending"));
     refresh();
   };
 
   const handleRegisterCollabPayment = async () => {
-    if (!accontoAmount) { setMsg("⚠ Inserire l'importo dell'acconto"); return; }
+    if (!accontoAmount) { setMsg(t(lang, "p_od_enter_deposit_amount_warn")); return; }
     const collabRoom = collaboratedRooms.find((r: any) => r.id === payModal.room_id);
     const collabProp = collaboratedProperties.find((p: any) => p.id === collabRoom?.property_id);
     const actualOwnerId = collabProp?.owner_id;
-    if (!actualOwnerId) { alert("Errore: impossibile identificare il proprietario della stanza."); return; }
+    if (!actualOwnerId) { alert(t(lang, "p_cd_error_identify_owner")); return; }
     const acc = parseFloat(accontoAmount) || 0;
     const payments: any[] = [];
     payments.push({ booking_id: payModal.id, amount: acc, date: accontoDate, method: accontoMethod, type: 'acconto_concierge', receiver: user.id });
@@ -1825,7 +1885,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
     }
     await submitPaymentProposal(payModal.id, payments);
     setPayModal(null); setPayModalIsCollab(false); setAccontoAmount("");
-    setMsg("Acconto registrato. Il proprietario verificherà la proposta.");
+    setMsg(t(lang, "p_od_deposit_registered_owner_verify"));
     refresh();
   };
 
@@ -1834,7 +1894,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
   const handleRecordFinalBalance = async (bookingId: string, userId: string, data: any) => {
     await recordFinalBalance(bookingId, { amount: data.amount, date: data.date, method: data.method });
     setBalanceModal(null);
-    setMsg("Conto chiuso correttamente!");
+    setMsg(t(lang, "p_od_balance_closed"));
     refresh();
   };
 
@@ -1851,26 +1911,26 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
   };
 
   const handleAddProperty = async () => {
-    if (!newPropName || !newPropLoc) return alert("Inserisci nome e località");
+    if (!newPropName || !newPropLoc) return alert(t(lang, "p_ad_enter_name_location"));
     const lat = newPropLat ? parseFloat(newPropLat) : null;
     const lng = newPropLng ? parseFloat(newPropLng) : null;
     await addProperty(user.id, newPropName, newPropLoc, newPropDesc, newPropAssetType, lat, lng);
     setNewPropName(""); setNewPropLoc(""); setNewPropDesc(""); setNewPropAssetType("apartment"); setNewPropLat(""); setNewPropLng("");
-    setMsg("Proprietà creata con successo");
+    setMsg(t(lang, "p_od_property_created"));
     refresh();
   };
 
   const handleAddRoom = async (propertyId: string) => {
-    if (!newRoomName.trim()) { alert("Inserisci il nome della camera"); return; }
+    if (!newRoomName.trim()) { alert(t(lang, "p_od_enter_room_name")); return; }
     await addRoomWithPricing(propertyId, newRoomName, Number(newRoomCap), newRoomDesc);
-    setNewRoomName(""); setNewRoomCap("2"); setNewRoomDesc(""); setMsg(`Stanza aggiunta`);
+    setNewRoomName(""); setNewRoomCap("2"); setNewRoomDesc(""); setMsg(t(lang, "p_od_room_added"));
     refresh();
   };
 
   const handleUpdateRoom = async () => {
     if (!editRoom) return;
     await updateRoomAction(editRoom.id, editRoom.name, Number(editRoom.capacity), editRoom.description, editRoom.bedrooms ? Number(editRoom.bedrooms) : null, editRoom.bathrooms ? Number(editRoom.bathrooms) : null);
-    setEditRoom(null); setMsg("Stanza aggiornata");
+    setEditRoom(null); setMsg(t(lang, "p_od_room_updated"));
     refresh();
   };
 
@@ -1878,20 +1938,20 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
     if (!collaboratorNick.trim()) return;
     const res = await addCollaboration(propertyId, collaboratorNick);
     if (!(res as any).success) { alert((res as any).error); return; }
-    setCollaboratorNick(""); setMsg("Collaboratore aggiunto");
+    setCollaboratorNick(""); setMsg(t(lang, "p_od_collaborator_added"));
     refresh();
   };
 
   const handleRemoveCollab = async (id: string) => {
     await removeCollaboration(id);
-    setMsg("Collaboratore rimosso");
+    setMsg(t(lang, "p_od_collaborator_removed"));
     refresh();
   };
 
   const handleSavePricing = async () => {
     if (!editPricing) return;
     await updatePricingAction(editPricing.roomId, editPricing.month, Number(editPricing.basePrice), Number(editPricing.cleaningFee));
-    setEditPricing(null); setMsg("Prezzi aggiornati");
+    setEditPricing(null); setMsg(t(lang, "p_od_pricing_updated"));
     refresh();
   };
 
@@ -1899,7 +1959,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
     if (!addPricing) return;
     const res = await addPricingMonthAction(addPricing.roomId, addPricing.month, Number(addPricing.basePrice), Number(addPricing.cleaningFee));
     if (!(res as any).success) { alert((res as any).error); return; }
-    setAddPricing(null); setMsg("Nuovo mese aggiunto al listino");
+    setAddPricing(null); setMsg(t(lang, "p_od_new_month_added"));
     refresh();
   };
   const totalRevenue = ownerBookings.filter((b: any) => b.status === "confirmed_owner").reduce((s: number, b: any) => s + b.owner_price_total, 0);
@@ -2282,7 +2342,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                       </td>
                       <td style={{ ...td, whiteSpace: "nowrap" }}>
                         {formatDate(b.start_date)} → {formatDate(b.end_date)}
-                        <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
+                        <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(lang, b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
                       </td>
                       <td style={td}>€{b.stay_price_total}</td>
                       <td style={td}>€{b.cleaning_fee_total}</td>
@@ -2326,6 +2386,8 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                               // Collaborated booking — concierge-level actions
                               <>
                                 {b.status === "draft" && <button style={{ ...btn(), fontSize: 10, padding: "4px 10px" }} onClick={() => handleStatusChange(b.id, "sent")}>{t(lang, "p_send_to_client")}</button>}
+                                {b.status === "sent" && <button style={{ ...btn("gold"), fontSize: 10, padding: "4px 10px" }} onClick={() => { setPayModal(b); setPayModalIsCollab(true); }}>{t(lang, "p_od_pm_register_deposit_btn")}</button>}
+                                {b.status === "payment_submitted" && <span style={{ fontSize: 10, color: C.textDim }}>{t(lang, "p_od_pm_awaiting_owner_confirmation")}</span>}
                                 {b.status === "confirmed_owner" && <span style={{ fontSize: 10, color: C.success }}>{t(lang, "p_od_confirmed")}</span>}
                                 {b.status === "evaso" && <span style={{ fontSize: 10, color: C.success }}>{t(lang, "p_od_completed_check")}</span>}
                               </>
@@ -2335,7 +2397,9 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                                 {b.status === "draft" && (
                                   <button style={{ ...btn(), fontSize: 10, padding: "4px 10px" }} onClick={() => handleStatusChange(b.id, "sent")}>{t(lang, "p_send_to_client")}</button>
                                 )}
-                                {b.status === "confirmed_owner" && <span style={{ fontSize: 10, color: C.success }}>{t(lang, "p_od_confirmed")}</span>}
+                                {b.status === "sent" && <button style={{ ...btn("gold"), fontSize: 10, padding: "4px 10px" }} onClick={() => { setPayModal(b); setPayModalIsCollab(false); }}>{t(lang, "p_od_pm_register_deposit_btn")}</button>}
+                                {b.status === "payment_submitted" && <button style={{ ...btn("gold"), fontSize: 10, padding: "4px 10px" }} onClick={() => setConfirmModal(b)}>{t(lang, "p_od_pm_confirm_payment_btn")}</button>}
+                                {b.status === "confirmed_owner" && <button style={{ ...btn("gold"), fontSize: 10, padding: "4px 10px" }} onClick={() => setBalanceModal(b)}>{t(lang, "p_od_pm_register_balance_btn")}</button>}
                                 {b.status === "evaso" && <span style={{ fontSize: 10, color: C.textDim }}>-</span>}
                               </>
                             )}
@@ -2397,6 +2461,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                     setAdjModal(b);
                     setLocalAdjs(JSON.parse(b.price_adjustments || "{}"));
                   }}
+                  lang={lang}
                 />
               </div>
               <div>
@@ -2612,7 +2677,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
           );
         })()}
 
-        {false && balanceModal && (() => {
+        {balanceModal && (() => {
           const payments = data.payments.filter((p: any) => p.booking_id === balanceModal.id);
           const accontoOwner = payments.find((p: any) => p.type === 'acconto_owner')?.amount || 0;
           const accontoConcierge = payments.find((p: any) => p.type === 'acconto_concierge')?.amount || 0;
@@ -2634,42 +2699,42 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
           return (
             <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 500, backdropFilter: "blur(8px)" }} onClick={() => setBalanceModal(null)}>
               <div style={{ ...card, width: 450, background: C.bg }} onClick={e => e.stopPropagation()}>
-                <h3 style={h3Style}>Registrazione Saldo Finale</h3>
-                <p style={{ fontSize: 12, color: C.textDim, marginTop: -10, marginBottom: 20 }}>Riepilogo e incasso per {balanceModal.client_name}</p>
+                <h3 style={h3Style}>{t(lang, "p_od_pm_balance_title")}</h3>
+                <p style={{ fontSize: 12, color: C.textDim, marginTop: -10, marginBottom: 20 }}>{t(lang, "p_od_pm_balance_subtitle", { name: balanceModal.client_name })}</p>
 
                 <div style={{ ...card, background: C.surfaceAlt, marginBottom: 20, fontSize: 13 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ color: C.textDim }}>Totale Soggiorno Originario:</span>
+                    <span style={{ color: C.textDim }}>{t(lang, "p_od_pm_original_stay_total")}</span>
                     <strong>€{totale}</strong>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ color: C.textDim }}>Commissione Concierge:</span>
+                    <span style={{ color: C.textDim }}>{t(lang, "p_od_pm_concierge_commission")}</span>
                     <strong>€{balanceModal.concierge_fee}</strong>
                   </div>
                   <hr style={{ border: `1px solid ${C.border}44`, margin: "8px 0" }} />
                   {accontoConcierge > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ color: C.textDim }}>Acconto versato dal cliente a {conciergeName}:</span>
+                      <span style={{ color: C.textDim }}>{t(lang, "p_od_pm_deposit_paid_by_client_to", { name: conciergeName })}</span>
                       <strong style={{ color: C.gold }}>€{accontoConcierge}</strong>
                     </div>
                   )}
                   {accontoOwner > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ color: C.textDim }}>Acconto versato dal cliente a te ({ownerName}):</span>
+                      <span style={{ color: C.textDim }}>{t(lang, "p_od_pm_deposit_paid_by_client_to_you", { name: ownerName })}</span>
                       <strong style={{ color: C.success }}>€{accontoOwner}</strong>
                     </div>
                   )}
-                  
+
                   {(stornoOwner > 0 || stornoConcierge > 0) && (
                     <div style={{ padding: "8px 12px", marginTop: 12, borderRadius: 6, borderLeft: `3px solid ${stornoOwner > 0 ? C.success : C.warning}`, background: "rgba(255,255,255,0.02)" }}>
                        {stornoOwner > 0 && (
                          <>
                            <div style={{ color: C.textDim, fontSize: 12, display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                             <span>Di cui trattenuti da {conciergeName} per commissione:</span>
+                             <span>{t(lang, "p_od_pm_retained_by_for_commission", { name: conciergeName })}</span>
                              <strong style={{ color: C.gold }}>€{balanceModal.concierge_fee}</strong>
                            </div>
                            <div style={{ color: C.textDim, fontSize: 12, display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                             <span>Quota acconto già incassata da te (da {conciergeName}):</span>
+                             <span>{t(lang, "p_od_pm_deposit_share_already_collected", { name: conciergeName })}</span>
                              <strong style={{ color: C.success }}>€{stornoOwner}</strong>
                            </div>
                          </>
@@ -2677,11 +2742,11 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                        {stornoConcierge > 0 && (
                          <>
                            <div style={{ color: C.textDim, fontSize: 12, display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                             <span>Di cui trattenuti da te (tua quota parziale):</span>
+                             <span>{t(lang, "p_od_pm_retained_by_you_partial")}</span>
                              <strong style={{ color: C.success }}>€{(accontoOwner - stornoConcierge).toFixed(2)}</strong>
                            </div>
                            <div style={{ color: C.textDim, fontSize: 12, display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                             <span>Storno (Commissione) versato a {conciergeName}:</span>
+                             <span>{t(lang, "p_od_pm_storno_paid_to", { name: conciergeName })}</span>
                              <strong style={{ color: C.warning }}>€{stornoConcierge}</strong>
                            </div>
                          </>
@@ -2690,24 +2755,24 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                   )}
 
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontSize: 14 }}>
-                    <span>Saldo da chiedere al check-in:</span>
+                    <span>{t(lang, "p_od_pm_balance_due_checkin")}</span>
                     <strong style={{ color: C.info }}>€{remainingFromGuest.toFixed(2)}</strong>
                   </div>
                 </div>
-                
+
                 <div style={{ marginBottom: 12 }}>
-                  <label style={label}>Importo Ricevuto (€)</label>
+                  <label style={label}>{t(lang, "p_od_pm_amount_received")}</label>
                   <input style={input} type="number" value={balanceData.amount || remainingFromGuest.toFixed(2)} onChange={e => setBalanceData({...balanceData, amount: e.target.value})} />
                 </div>
                 <div style={grid(2)}>
                   <div>
-                    <label style={label}>Data Incasso</label>
+                    <label style={label}>{t(lang, "p_od_pm_collection_date")}</label>
                     <input style={input} type="date" value={balanceData.date} onChange={e => setBalanceData({...balanceData, date: e.target.value})} />
                   </div>
                   <div>
-                    <label style={label}>Metodo Incasso</label>
+                    <label style={label}>{t(lang, "p_od_pm_collection_method")}</label>
                     <select style={sel} value={balanceData.method} onChange={e => setBalanceData({...balanceData, method: e.target.value})}>
-                      <option value="">Seleziona...</option>
+                      <option value="">{t(lang, "p_od_pm_select_placeholder")}</option>
                       {data.userPaymentMethods.filter((m: any) => m.user_id === user.id).map((m: any) => (
                         <option key={m.id} value={m.name}>{m.name}</option>
                       ))}
@@ -2717,7 +2782,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
 
                 {balanceModal.concierge_id !== user.id && remainingFromGuest > (totale - balanceModal.concierge_fee - accontoOwner) && (
                   <div style={{ marginTop: 15, paddingTop: 15, borderTop: `1px solid ${C.border}`, fontSize: 10, color: C.textDim }}>
-                    ℹ️ Uno storno a favore del Concierge di <strong>€{Math.max(0, balanceModal.concierge_fee - accontoConcierge).toFixed(2)}</strong> verrà generato automaticamente. Il Concierge definirà il suo metodo di incasso.
+                    ℹ️ {t(lang, "p_od_pm_storno_auto_concierge_info", { amount: Math.max(0, balanceModal.concierge_fee - accontoConcierge).toFixed(2) })}
                   </div>
                 )}
 
@@ -2728,14 +2793,14 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                       date: balanceData.date,
                       method: balanceData.method
                     });
-                  }}>Registra ed Evadi</button>
-                  <button style={{ ...btn(), flex: 1 }} onClick={() => setBalanceModal(null)}>Chiudi</button>
+                  }}>{t(lang, "p_od_pm_register_and_close")}</button>
+                  <button style={{ ...btn(), flex: 1 }} onClick={() => setBalanceModal(null)}>{t(lang, "p_common_close")}</button>
                 </div>
               </div>
             </div>
           );
         })()}
-        {false && confirmModal && (() => {
+        {confirmModal && (() => {
           const payments = data.payments.filter((p: any) => p.booking_id === confirmModal.id);
           const stornoOwner = payments.find((p: any) => p.type === 'storno_owner_in')?.amount || 0;
           const stornoConcierge = payments.find((p: any) => p.type === 'storno_concierge_in')?.amount || 0;
@@ -2748,20 +2813,20 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
           return (
             <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 500, backdropFilter: "blur(8px)" }} onClick={() => setConfirmModal(null)}>
               <div style={{ ...card, width: 400, background: C.bg }} onClick={e => e.stopPropagation()}>
-                <h3 style={h3Style}>Verifica Proposta</h3>
-                <p style={{ fontSize: 12, color: C.textDim, marginTop: -10, marginBottom: 20 }}>Dettaglio incassi per {confirmModal.client_name}</p>
-                
+                <h3 style={h3Style}>{t(lang, "p_od_pm_verify_title")}</h3>
+                <p style={{ fontSize: 12, color: C.textDim, marginTop: -10, marginBottom: 20 }}>{t(lang, "p_od_pm_verify_subtitle", { name: confirmModal.client_name })}</p>
+
                 <div style={{ ...card, background: C.surfaceAlt, marginBottom: 20 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                    <span style={{ color: C.textDim }}>Totale originario:</span>
+                    <span style={{ color: C.textDim }}>{t(lang, "p_od_pm_original_total")}</span>
                     <strong>€{confirmModal.total_price}</strong>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                    <span style={{ color: C.textDim }}>Incassato da:</span>
-                    <strong style={{ color: isConciergeCollector ? C.gold : C.success }}>{isConciergeCollector ? `${conciergeName} (Concierge)` : `${user.nickname} (Owner)`}</strong>
+                    <span style={{ color: C.textDim }}>{t(lang, "p_od_pm_collected_by")}</span>
+                    <strong style={{ color: isConciergeCollector ? C.gold : C.success }}>{isConciergeCollector ? t(lang, "p_od_pm_collected_by_concierge", { name: conciergeName }) : t(lang, "p_od_pm_collected_by_owner", { name: user.nickname })}</strong>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                    <span style={{ color: C.textDim }}>Importo Incassato:</span>
+                    <span style={{ color: C.textDim }}>{t(lang, "p_od_pm_amount_collected")}</span>
                     <strong>€{isConciergeCollector ? accontoConcierge : accontoOwner}</strong>
                   </div>
                 </div>
@@ -2769,44 +2834,44 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                 <div style={{ ...card, background: C.surfaceAlt, borderColor: C.gold + "44", marginBottom: 20 }}>
                   {isConciergeCollector && stornoOwner > 0 && (
                     <div style={{ fontSize: 13, color: C.gold }}>
-                      <strong style={{ display: "block", marginBottom: 6 }}>Storno a tuo favore ({user.nickname}): €{stornoOwner}</strong>
-                      <span style={{ fontSize: 11, color: C.textDim }}>Questo importo ti deve essere versato da {conciergeName} per coprire la tua quota prima del check-in.</span>
+                      <strong style={{ display: "block", marginBottom: 6 }}>{t(lang, "p_od_pm_storno_favor_you", { name: user.nickname, amount: stornoOwner })}</strong>
+                      <span style={{ fontSize: 11, color: C.textDim }}>{t(lang, "p_od_pm_storno_favor_you_desc", { name: conciergeName })}</span>
                     </div>
                   )}
                   {isConciergeCollector && stornoOwner === 0 && (
                     <div style={{ fontSize: 13, color: C.textDim }}>
-                      Nessuno storno a tuo favore in questa fase. (L'acconto copre solo la commissione).
+                      {t(lang, "p_od_pm_no_storno_commission_only")}
                     </div>
                   )}
 
                   {!isConciergeCollector && stornoConcierge > 0 && (
                     <div style={{ fontSize: 13, color: C.warning }}>
-                      <strong style={{ display: "block", marginBottom: 6 }}>Attenzione: Storno in uscita (€{stornoConcierge})</strong>
-                      <span style={{ fontSize: 11, color: C.textDim }}>Hai incassato tu l'acconto. Devi versare a {conciergeName} la sua provvigione generata.</span>
+                      <strong style={{ display: "block", marginBottom: 6 }}>{t(lang, "p_od_pm_storno_outgoing_warning", { amount: stornoConcierge })}</strong>
+                      <span style={{ fontSize: 11, color: C.textDim }}>{t(lang, "p_od_pm_storno_outgoing_desc", { name: conciergeName })}</span>
                     </div>
                   )}
                   {!isConciergeCollector && stornoConcierge === 0 && (
                     <div style={{ fontSize: 13, color: C.textDim }}>
-                      Nessun importo trattenuto in questa fase.
+                      {t(lang, "p_od_pm_no_amount_retained")}
                     </div>
                   )}
                 </div>
 
                 <div style={{ fontSize: 11, color: C.textDim, marginBottom: 24, textAlign: "center" }}>
-                  Cliccando "Conferma" bloccherai definitivamente le date sul calendario (visibilità rossa).
+                  {t(lang, "p_od_pm_confirm_lock_warning")}
                 </div>
 
                 <div style={{ ...card, background: "rgba(255,255,255,0.02)", marginBottom: 24 }}>
-                  <p style={{ fontSize: 11, color: C.textMuted, marginBottom: 12 }}>Conferma ricezione Acconto / Storno:</p>
+                  <p style={{ fontSize: 11, color: C.textMuted, marginBottom: 12 }}>{t(lang, "p_od_pm_confirm_receipt_label")}</p>
                   <div style={grid(2)}>
                     <div>
-                      <label style={label}>Data ricezione</label>
+                      <label style={label}>{t(lang, "p_od_pm_receipt_date")}</label>
                       <input style={{ ...input, padding: "6px 8px", fontSize: 12 }} type="date" value={confirmData.date} onChange={e => setConfirmData({...confirmData, date: e.target.value})} />
                     </div>
                     <div>
-                      <label style={label}>Metodo</label>
+                      <label style={label}>{t(lang, "p_od_pm_method_label")}</label>
                       <select style={{ ...sel, padding: "6px 8px", fontSize: 12 }} value={confirmData.method} onChange={e => setConfirmData({...confirmData, method: e.target.value})}>
-                        <option value="">Seleziona...</option>
+                        <option value="">{t(lang, "p_od_pm_select_placeholder")}</option>
                         {data.userPaymentMethods.filter((m: any) => m.user_id === user.id).map((m: any) => (
                           <option key={m.id} value={m.name}>{m.name}</option>
                         ))}
@@ -2818,18 +2883,18 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                 <div style={{ display: "flex", gap: 10 }}>
                   <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
                     await confirmPaymentAndBlock(confirmModal.id, user.id, confirmData);
-                    setMsg("Proposta confermata! Calendario bloccato.");
+                    setMsg(t(lang, "p_od_confirmed_calendar_locked"));
                     setConfirmModal(null);
                     refresh();
-                  }}>Conferma & Blocca</button>
-                  <button style={{ ...btn(), flex: 1 }} onClick={() => setConfirmModal(null)}>Annulla</button>
+                  }}>{t(lang, "p_od_pm_confirm_and_lock")}</button>
+                  <button style={{ ...btn(), flex: 1 }} onClick={() => setConfirmModal(null)}>{t(lang, "p_common_cancel")}</button>
                 </div>
               </div>
             </div>
           );
         })()}
 
-        {false && payModal && (() => {
+        {payModal && (() => {
           const accAmt = parseFloat(accontoAmount) || 0;
           const collabRoom = payModalIsCollab ? collaboratedRooms.find((r: any) => r.id === payModal.room_id) : null;
           const collabProp = collabRoom ? collaboratedProperties.find((p: any) => p.id === collabRoom.property_id) : null;
@@ -2839,29 +2904,29 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
           return (
             <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 500, backdropFilter: "blur(8px)" }} onClick={() => { setPayModal(null); setPayModalIsCollab(false); }}>
               <div style={{ ...card, width: 500, background: C.bg }} onClick={e => e.stopPropagation()}>
-                <h3 style={h3Style}>Registrazione Acconto</h3>
+                <h3 style={h3Style}>{t(lang, "p_od_pm_deposit_title")}</h3>
                 {payModalIsCollab && (
                   <div style={{ fontSize: 11, color: C.info, background: C.info + "11", border: `1px solid ${C.info}33`, borderRadius: 4, padding: "6px 10px", marginBottom: 12 }}>
-                    🤝 Collaborazione — stai registrando come concierge per <strong>{collabOwner?.nickname || "Owner"}</strong>
+                    {t(lang, "p_od_pm_collab_banner", { name: collabOwner?.nickname || t(lang, "p_common_owner") })}
                   </div>
                 )}
-                <p style={{ fontSize: 12, color: C.textDim, marginTop: -4, marginBottom: 20 }}>Totale Prenotazione: <strong style={{color: C.gold}}>€{payModal.total_price}</strong></p>
+                <p style={{ fontSize: 12, color: C.textDim, marginTop: -4, marginBottom: 20 }}>{t(lang, "p_od_pm_booking_total")} <strong style={{color: C.gold}}>€{payModal.total_price}</strong></p>
 
                 <div style={{ ...card, background: C.surfaceAlt }}>
-                  <h4 style={{ ...h3Style, fontSize: 13, marginBottom: 12 }}>Dettagli Acconto Ricevuto</h4>
+                  <h4 style={{ ...h3Style, fontSize: 13, marginBottom: 12 }}>{t(lang, "p_od_pm_deposit_details_heading")}</h4>
                   <div style={grid(3)}>
                     <div>
-                      <label style={label}>Importo</label>
+                      <label style={label}>{t(lang, "p_od_pm_amount_label")}</label>
                       <input style={input} type="number" value={accontoAmount} onChange={e => setAccontoAmount(e.target.value)} placeholder="€ 0.00" />
                     </div>
                     <div>
-                      <label style={label}>Data</label>
+                      <label style={label}>{t(lang, "p_od_pm_date_short")}</label>
                       <input style={input} type="date" value={accontoDate} onChange={e => setAccontoDate(e.target.value)} />
                     </div>
                     <div>
-                      <label style={label}>Metodo Incasso</label>
+                      <label style={label}>{t(lang, "p_od_pm_collection_method")}</label>
                       <select style={sel} value={accontoMethod} onChange={e => setAccontoMethod(e.target.value)}>
-                        <option value="">Seleziona...</option>
+                        <option value="">{t(lang, "p_od_pm_select_placeholder")}</option>
                         {data.userPaymentMethods
                           .filter((m: any) => m.user_id === user.id)
                           .map((m: any) => (
@@ -2873,35 +2938,35 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
 
                   {!payModalIsCollab && accAmt >= payModal.concierge_fee && payModal.concierge_id !== user.id && (
                     <div style={{ marginTop: 15, paddingTop: 15, borderTop: `1px solid ${C.border}`, fontSize: 10, color: C.textDim }}>
-                       ℹ️ Hai incassato l'acconto. Uno storno di <strong>€{payModal.concierge_fee.toFixed(2)}</strong> verrà inviato automaticamente al Concierge, che definirà il proprio metodo di incasso in fase di verifica.
+                       ℹ️ {t(lang, "p_od_pm_storno_incoming_info", { amount: payModal.concierge_fee.toFixed(2) })}
                     </div>
                   )}
                 </div>
 
                 <div style={{ ...card, background: C.surfaceAlt, marginTop: 20, borderColor: C.gold + "22" }}>
                   <div style={{ fontSize: 12, lineHeight: 1.8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>Tua Commissione:</span> <span>€{payModal.concierge_fee}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>{t(lang, "p_od_pm_your_commission")}</span> <span>€{payModal.concierge_fee}</span></div>
                     {payModalIsCollab ? (
                       <>
                         <div style={{ display: "flex", justifyContent: "space-between", color: C.gold }}>
-                          <span>Trattenuto da te (Commissione):</span>
+                          <span>{t(lang, "p_od_pm_retained_commission")}</span>
                           <strong>€{Math.min(accAmt, payModal.concierge_fee).toFixed(2)}</strong>
                         </div>
                         {stornoForOwner > 0 && (
                           <div style={{ display: "flex", justifyContent: "space-between", color: C.info }}>
-                            <span>Da girare a {collabOwner?.nickname || "Owner"}:</span>
+                            <span>{t(lang, "p_od_pm_transfer_to_owner", { name: collabOwner?.nickname || t(lang, "p_common_owner") })}</span>
                             <strong>€{stornoForOwner.toFixed(2)}</strong>
                           </div>
                         )}
                       </>
                     ) : payModal.concierge_id === user.id ? (
                       <div style={{ display: "flex", justifyContent: "space-between", color: C.success }}>
-                        <span>Trattenuto da te (Proprietario Diretto):</span>
+                        <span>{t(lang, "p_od_pm_retained_direct_owner")}</span>
                         <strong>€{accAmt.toFixed(2)}</strong>
                       </div>
                     ) : (
                       <div style={{ display: "flex", justifyContent: "space-between", color: C.gold }}>
-                        <span>Storno da pagare al Concierge:</span>
+                        <span>{t(lang, "p_od_pm_storno_to_pay_concierge")}</span>
                         <strong>€{Math.min(accAmt, payModal.concierge_fee).toFixed(2)}</strong>
                       </div>
                     )}
@@ -2909,8 +2974,8 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                 </div>
 
                 <div style={{ display: "flex", gap: 10, marginTop: 30 }}>
-                  <button style={{ ...btn("gold"), flex: 1 }} onClick={payModalIsCollab ? handleRegisterCollabPayment : handleRegisterPayment}>Salva Registrazione Acconto</button>
-                  <button style={{ ...btn(), flex: 1 }} onClick={() => { setPayModal(null); setPayModalIsCollab(false); }}>Annulla</button>
+                  <button style={{ ...btn("gold"), flex: 1 }} onClick={payModalIsCollab ? handleRegisterCollabPayment : handleRegisterPayment}>{t(lang, "p_od_pm_save_deposit")}</button>
+                  <button style={{ ...btn(), flex: 1 }} onClick={() => { setPayModal(null); setPayModalIsCollab(false); }}>{t(lang, "p_common_cancel")}</button>
                 </div>
               </div>
             </div>
@@ -2930,12 +2995,13 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
               onRefresh={refresh} 
               roomBookings={data.bookings.filter((b: any) => b.room_id === viewCalendar)} 
               users={data.users} 
-              allPricing={data.pricing} 
+              allPricing={data.pricing}
               isMobile={isMobile}
               onEditBooking={(b) => {
                 setAdjModal(b);
                 setLocalAdjs(JSON.parse(b.price_adjustments || "{}"));
               }}
+              lang={lang}
             />
           </div>
         </div>
@@ -2945,7 +3011,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 200 }} onClick={() => setEditPricing(null)}>
           <div style={{ ...card, width: 360 }} onClick={e => e.stopPropagation()}>
             <h3 style={h3Style}>{t(lang, "p_od_price_month")} {editPricing.month}</h3>
-            <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_base_label")}{unitSuffix(data.properties.find((p: any) => p.id === allRooms.find((r: any) => r.id === editPricing.roomId)?.property_id)?.asset_type)} (€)</label><input style={input} type="number" value={editPricing.basePrice} onChange={e => setEditPricing({ ...editPricing, basePrice: e.target.value })} /></div>
+            <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_base_label")}{unitSuffix(lang, data.properties.find((p: any) => p.id === allRooms.find((r: any) => r.id === editPricing.roomId)?.property_id)?.asset_type)} (€)</label><input style={input} type="number" value={editPricing.basePrice} onChange={e => setEditPricing({ ...editPricing, basePrice: e.target.value })} /></div>
             <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_cleaning_label")}</label><input style={input} type="number" value={editPricing.cleaningFee} onChange={e => setEditPricing({ ...editPricing, cleaningFee: e.target.value })} /></div>
             <div style={{ display: "flex", gap: 8 }}>
               <button style={{ ...btn("gold"), flex: 1 }} onClick={handleSavePricing}>{t(lang, "p_common_save")}</button>
@@ -2979,7 +3045,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
           <div style={{ ...card, width: 360 }} onClick={e => e.stopPropagation()}>
             <h3 style={h3Style}>{t(lang, "p_od_add_month_to_list")}</h3>
             <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_month_label")}</label><input style={input} type="month" value={addPricing.month} onChange={e => setAddPricing({ ...addPricing, month: e.target.value })} /></div>
-            <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_base_label")}{unitSuffix(data.properties.find((p: any) => p.id === allRooms.find((r: any) => r.id === addPricing.roomId)?.property_id)?.asset_type)} (€)</label><input style={input} type="number" value={addPricing.basePrice} onChange={e => setAddPricing({ ...addPricing, basePrice: e.target.value })} /></div>
+            <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_base_label")}{unitSuffix(lang, data.properties.find((p: any) => p.id === allRooms.find((r: any) => r.id === addPricing.roomId)?.property_id)?.asset_type)} (€)</label><input style={input} type="number" value={addPricing.basePrice} onChange={e => setAddPricing({ ...addPricing, basePrice: e.target.value })} /></div>
             <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_cleaning_label")}</label><input style={input} type="number" value={addPricing.cleaningFee} onChange={e => setAddPricing({ ...addPricing, cleaningFee: e.target.value })} /></div>
             <div style={{ display: "flex", gap: 8 }}>
               <button style={{ ...btn("gold"), flex: 1 }} onClick={handleAddPricingMonth}>{t(lang, "p_common_add")}</button>
@@ -3068,15 +3134,15 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                   <h4 style={{ ...h3Style, fontSize: 13, marginBottom: 12, color: C.gold }}>{t(lang, "p_od_live_financial_summary")}</h4>
                   <div style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: C.textDim }}>{t(lang, "p_od_base_price_x", { unit: unitSuffix(adjModal?.asset_type) })}</span>
+                      <span style={{ color: C.textDim }}>{t(lang, "p_od_base_price_x", { unit: unitSuffix(lang, adjModal?.asset_type) })}</span>
                       <strong style={{ color: C.text }}>€{nightlyBase.toFixed(2)}</strong>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: C.textDim }}>{t(lang, "p_od_final_price_x", { unit: unitSuffix(adjModal?.asset_type) })}</span>
+                      <span style={{ color: C.textDim }}>{t(lang, "p_od_final_price_x", { unit: unitSuffix(lang, adjModal?.asset_type) })}</span>
                       <strong style={{ color: C.gold }}>€{nightlyNew.toFixed(2)}</strong>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${C.border}44`, paddingTop: 8 }}>
-                      <span style={{ color: C.textDim }}>{t(lang, "p_od_stay_paren", { n: days.length, unit: unitLabel(adjModal?.asset_type, days.length) })}</span>
+                      <span style={{ color: C.textDim }}>{t(lang, "p_od_stay_paren", { n: days.length, unit: unitLabel(lang, adjModal?.asset_type, days.length) })}</span>
                       <strong style={{ color: C.text }}>€{liveStay.toFixed(2)}</strong>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -3178,7 +3244,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
               <div style={{ background: C.surfaceAlt, padding: 16, borderRadius: 8, fontSize: 13, color: C.text, whiteSpace: "pre-wrap", minHeight: 100, border: `1px solid ${C.border}` }}>
                 {viewNotes}
               </div>
-              <button style={{ ...btn(), width: "100%", marginTop: 20 }} onClick={() => setViewNotes(null)}>Chiudi</button>
+              <button style={{ ...btn(), width: "100%", marginTop: 20 }} onClick={() => setViewNotes(null)}>{t(lang, "p_common_close")}</button>
             </div>
           </div>
         )}
@@ -3186,11 +3252,11 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1100, backdropFilter: "blur(8px)" }}>
             <div style={{ ...card, width: 320, textAlign: "center", animation: "modalIn 0.2s ease-out" }}>
               <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
-              <h3 style={{ ...h3Style, marginBottom: 8 }}>Conferma Eliminazione</h3>
-              <p style={{ color: C.textDim, fontSize: 13, marginBottom: 24 }}>Sicuro di voler eliminare questa prenotazione? Le date verranno sbloccate e i conti ripristinati.</p>
+              <h3 style={{ ...h3Style, marginBottom: 8 }}>{t(lang, "p_cd_confirm_delete_title")}</h3>
+              <p style={{ color: C.textDim, fontSize: 13, marginBottom: 24 }}>{t(lang, "p_od_confirm_delete_booking_desc2")}</p>
               <div style={{ display: "flex", gap: 12 }}>
-                <button style={{ ...btn(), flex: 1 }} onClick={() => setDeleteBookingId(null)}>Annulla</button>
-                <button style={{ ...btn(C.danger), flex: 1 }} onClick={() => performDeleteBooking(deleteBookingId)}>Elimina</button>
+                <button style={{ ...btn(), flex: 1 }} onClick={() => setDeleteBookingId(null)}>{t(lang, "p_common_cancel")}</button>
+                <button style={{ ...btn(C.danger), flex: 1 }} onClick={() => performDeleteBooking(deleteBookingId)}>{t(lang, "p_common_delete")}</button>
               </div>
             </div>
           </div>
@@ -3198,17 +3264,17 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
         {confirmingDeleteMethod && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1200, backdropFilter: "blur(8px)" }} onClick={() => setConfirmingDeleteMethod(null)}>
             <div style={{ ...card, width: 350, background: C.bg, textAlign: "center" }} onClick={e => e.stopPropagation()}>
-              <h3 style={h3Style}>Conferma Eliminazione Metodo</h3>
-              <p style={{ fontSize: 14, color: C.textDim, marginBottom: 24 }}>Sei sicuro di voler eliminare questo metodo di pagamento?</p>
+              <h3 style={h3Style}>{t(lang, "p_cd_confirm_delete_method_title")}</h3>
+              <p style={{ fontSize: 14, color: C.textDim, marginBottom: 24 }}>{t(lang, "p_cd_confirm_delete_method_desc")}</p>
               <div style={{ display: "flex", gap: 12 }}>
-                <button style={{ ...btn(), flex: 1 }} onClick={() => setConfirmingDeleteMethod(null)}>Annulla</button>
+                <button style={{ ...btn(), flex: 1 }} onClick={() => setConfirmingDeleteMethod(null)}>{t(lang, "p_common_cancel")}</button>
                 <button style={{ ...btn(), background: C.danger, color: "#fff", flex: 1, border: "none" }} onClick={async () => {
                   if (confirmingDeleteMethod) {
                     await deletePaymentMethod(confirmingDeleteMethod);
                     setConfirmingDeleteMethod(null);
                     refresh();
                   }
-                }}>Elimina</button>
+                }}>{t(lang, "p_common_delete")}</button>
               </div>
             </div>
           </div>
@@ -3268,13 +3334,13 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 
   const handleAdminStatusChange = async (id: string, status: string) => {
     await updateBookingStatus(id, status);
-    setMsg("Stato prenotazione aggiornato");
+    setMsg(t(lang, "p_ad_status_updated"));
     refresh();
   };
   const handleAdminDeleteBooking = async (id: string) => {
-    if (!confirm("Eliminare questa prenotazione? Questa azione è irreversibile.")) return;
+    if (!confirm(t(lang, "p_ad_confirm_delete_booking"))) return;
     await deleteBookingAction(id);
-    setMsg("Prenotazione eliminata");
+    setMsg(t(lang, "p_cd_booking_deleted"));
     refresh();
   };
 
@@ -3313,7 +3379,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
   }, [tab, filteredAssets.map((p: any) => p.id).join(",")]);
 
   const handleAssetImageUpload = async (propId: string, file: File) => {
-    if (file.size > 20 * 1024 * 1024) { alert(`${file.name}: troppo grande (max 20MB)`); return; }
+    if (file.size > 20 * 1024 * 1024) { alert(t(lang, "p_ad_file_too_large_20mb", { file: file.name })); return; }
     const reader = new FileReader();
     reader.onload = async (e) => {
       const base64 = e.target?.result as string;
@@ -3325,8 +3391,8 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
     reader.readAsDataURL(file);
   };
   const handleAssetPdfUpload = async (propId: string, file: File) => {
-    if (file.type !== "application/pdf") { alert("Il file deve essere un PDF."); return; }
-    if (file.size > 10 * 1024 * 1024) { alert("Il PDF è troppo grande (max 10MB)."); return; }
+    if (file.type !== "application/pdf") { alert(t(lang, "p_ad_file_must_be_pdf")); return; }
+    if (file.size > 10 * 1024 * 1024) { alert(t(lang, "p_ad_pdf_too_large_10mb")); return; }
     const reader = new FileReader();
     reader.onload = async (e) => {
       await updatePropertyPdf(propId, e.target?.result as string, file.name);
@@ -3337,31 +3403,31 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 
   const handleApprove = async (userId: string) => {
     await approveUser(userId);
-    setMsg("Utente approvato");
+    setMsg(t(lang, "p_ad_user_approved"));
     refresh();
   };
   const handleReject = async (userId: string) => {
-    if (!confirm("Rifiutare e rimuovere questo utente?")) return;
+    if (!confirm(t(lang, "p_ad_confirm_reject_user"))) return;
     await rejectUser(userId);
-    setMsg("Utente rifiutato e rimosso");
+    setMsg(t(lang, "p_ad_user_rejected"));
     refresh();
   };
   const handleRoleChange = async (userId: string, newRole: string) => {
     await updateUserRole(userId, newRole);
-    setMsg("Ruolo aggiornato");
+    setMsg(t(lang, "p_ad_role_updated"));
     refresh();
   };
   const handleDeleteUser = async (userId: string, nick: string) => {
-    if (!confirm(`Eliminare l'utente "${nick}"? L'azione è irreversibile.`)) return;
+    if (!confirm(t(lang, "p_ad_confirm_delete_user", { nick }))) return;
     await deleteUserAction(userId);
-    setMsg(`Utente ${nick} eliminato`);
+    setMsg(t(lang, "p_ad_user_deleted", { nick }));
     refresh();
   };
   const handleSaveCommission = async (userId: string) => {
     const rate = parseFloat(commRates[userId] || "0");
-    if (isNaN(rate) || rate < 0 || rate > 100) { setMsg("⚠ Percentuale non valida (0-100)"); return; }
+    if (isNaN(rate) || rate < 0 || rate > 100) { setMsg(t(lang, "p_ad_invalid_percentage_range")); return; }
     await setCommissionRule(userId, rate, 'percentage');
-    setMsg("Regola commissione salvata");
+    setMsg(t(lang, "p_ad_commission_rule_saved"));
     refresh();
   };
 
@@ -3386,7 +3452,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 
   const handleNaImageFiles = async (files: FileList) => {
     for (const file of Array.from(files)) {
-      if (file.size > 20 * 1024 * 1024) { alert(`${file.name}: troppo grande (max 20MB)`); continue; }
+      if (file.size > 20 * 1024 * 1024) { alert(t(lang, "p_ad_file_too_large_20mb", { file: file.name })); continue; }
       const base64: string = await new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target?.result as string);
@@ -3398,17 +3464,17 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
   };
 
   const handleNaPdfFile = (file: File) => {
-    if (file.type !== "application/pdf") { alert("Il file deve essere un PDF."); return; }
-    if (file.size > 10 * 1024 * 1024) { alert("Il PDF è troppo grande (max 10MB)."); return; }
+    if (file.type !== "application/pdf") { alert(t(lang, "p_ad_file_must_be_pdf")); return; }
+    if (file.size > 10 * 1024 * 1024) { alert(t(lang, "p_ad_pdf_too_large_10mb")); return; }
     const reader = new FileReader();
     reader.onload = (e) => setNaPdf({ base64: e.target?.result as string, name: file.name });
     reader.readAsDataURL(file);
   };
 
   const handleAddAsset = async () => {
-    if (!naName.trim() || !naLoc.trim()) { alert("Inserisci nome e località/porto/garage"); return; }
-    if (naOwnerMode === "existing" && !naOwnerId) { alert("Seleziona un proprietario"); return; }
-    if (naOwnerMode === "new" && !naNewNick.trim()) { alert("Inserisci il nickname del nuovo proprietario"); return; }
+    if (!naName.trim() || !naLoc.trim()) { alert(t(lang, "p_ad_enter_name_location")); return; }
+    if (naOwnerMode === "existing" && !naOwnerId) { alert(t(lang, "p_ad_select_owner")); return; }
+    if (naOwnerMode === "new" && !naNewNick.trim()) { alert(t(lang, "p_ad_enter_new_owner_nick")); return; }
     const low = parseFloat(naPriceLow || "0") || 0;
     const mid = naPriceMid ? (parseFloat(naPriceMid) || low) : low;
     const high = naPriceHigh ? (parseFloat(naPriceHigh) || low) : low;
@@ -3419,11 +3485,11 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
       let ownerId = naOwnerId;
       if (naOwnerMode === "new") {
         const res = await createManagedUser(naNewNick, naNewRole);
-        if (!res.success || !res.id) { alert("Errore creazione proprietario: " + (res as any).error); return; }
+        if (!res.success || !res.id) { alert(t(lang, "p_ad_error_creating_owner", { error: (res as any).error })); return; }
         ownerId = res.id;
       }
       const propId = await addProperty(ownerId, naName, naLoc, naDesc, naAssetType);
-      if (!propId) { alert("Errore nella creazione dell'asset."); return; }
+      if (!propId) { alert(t(lang, "p_ad_error_creating_asset")); return; }
 
       const roomId = await addRoomWithPricing(propId, naName, Number(naCapacity) || 1, naDesc);
       if (roomId) {
@@ -3445,7 +3511,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
       setNaName(""); setNaLoc(""); setNaDesc(""); setNaImages([]); setNaPdf(null);
       setNaPriceLow(""); setNaPriceMid(""); setNaPriceHigh(""); setNaCleaningFee("0");
       setNaConciergeNick(""); setNaOwnerId(""); setNaNewNick("");
-      setMsg("Asset creato e pubblicato in vetrina con successo.");
+      setMsg(t(lang, "p_ad_asset_created"));
       refresh();
     } finally {
       setNaSubmitting(false);
@@ -3461,17 +3527,17 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
     <div>
       <div style={nav}>
         {[
-          { key: "users", l: "👥 Utenti" },
-          { key: "pending", l: `⏳ In Attesa${pendingUsers.length > 0 ? ` (${pendingUsers.length})` : ""}` },
-          { key: "addasset", l: "➕ Aggiungi Asset" },
-          { key: "manageassets", l: `🏠 Gestisci Asset (${allProperties.length})` },
-          { key: "bookings", l: `📖 Prenotazioni (${allBookings.length})` },
-          { key: "requests", l: "📥 Richieste Clienti" },
-          { key: "platform", l: "⚙️ Commissioni" },
-          { key: "commissions", l: "💰 Fee Concierge" },
-          { key: "overview", l: "📊 Overview" },
-        ].map(t => (
-          <div key={t.key} style={navItem(tab === t.key)} onClick={() => setTab(t.key)}>{t.l}</div>
+          { key: "users", l: t(lang, "p_nav_users") },
+          { key: "pending", l: `${t(lang, "p_ad_nav_pending")}${pendingUsers.length > 0 ? ` (${pendingUsers.length})` : ""}` },
+          { key: "addasset", l: t(lang, "p_nav_addasset") },
+          { key: "manageassets", l: `🏠 ${t(lang, "p_nav_manageassets")} (${allProperties.length})` },
+          { key: "bookings", l: `${t(lang, "p_ad_nav_bookings")} (${allBookings.length})` },
+          { key: "requests", l: t(lang, "p_ad_nav_requests") },
+          { key: "platform", l: t(lang, "p_ad_nav_commissions") },
+          { key: "commissions", l: t(lang, "p_ad_nav_concierge_fees") },
+          { key: "overview", l: t(lang, "p_ad_nav_overview") },
+        ].map(nv => (
+          <div key={nv.key} style={navItem(tab === nv.key)} onClick={() => setTab(nv.key)}>{nv.l}</div>
         ))}
       </div>
       <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
@@ -3479,9 +3545,9 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 
         {tab === "pending" && (
           <div>
-            <h2 style={h2Style}>Registrazioni in Attesa</h2>
+            <h2 style={h2Style}>{t(lang, "p_ad_pending_registrations")}</h2>
             {pendingUsers.length === 0 ? (
-              <div style={{ ...card, textAlign: "center", color: C.textDim }}>Nessuna registrazione in attesa.</div>
+              <div style={{ ...card, textAlign: "center", color: C.textDim }}>{t(lang, "p_ad_no_pending_registrations")}</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {pendingUsers.map((u: any) => (
@@ -3493,18 +3559,18 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                       <div>
                         <div style={{ fontWeight: 700, color: C.gold, fontSize: 15 }}>{u.nickname}</div>
                         {(u.first_name || u.last_name) && <div style={{ fontSize: 12, color: C.text }}>{[u.first_name, u.last_name].filter(Boolean).join(" ")}</div>}
-                        <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>Ruolo: <span style={{ color: C.text }}>{roleIcon(u.role)} {u.role}</span></div>
+                        <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>{t(lang, "p_ad_role_colon")} <span style={{ color: C.text }}>{roleIcon(u.role)} {u.role}</span></div>
                         {u.email && <div style={{ fontSize: 11, color: C.textDim }}>{u.email}</div>}
                         {u.phone && <div style={{ fontSize: 11, color: C.textDim }}>{u.phone}</div>}
-                        <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>Registrato il {new Date(u.created_at).toLocaleDateString("it-IT")}</div>
+                        <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>{t(lang, "p_ad_registered_on")} {new Date(u.created_at).toLocaleDateString("it-IT")}</div>
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <select style={{ ...sel, width: 130, padding: "4px 8px", fontSize: 11 }} defaultValue={u.role} onChange={e => updateUserRole(u.id, e.target.value)}>
                         {["owner", "concierge", "agent"].map(r => <option key={r} value={r}>{r}</option>)}
                       </select>
-                      <button style={{ ...btn("gold"), fontSize: 11 }} onClick={() => handleApprove(u.id)}>✓ Approva</button>
-                      <button style={{ ...btn(), fontSize: 11, color: C.danger, borderColor: C.danger + "44" }} onClick={() => handleReject(u.id)}>✕ Rifiuta</button>
+                      <button style={{ ...btn("gold"), fontSize: 11 }} onClick={() => handleApprove(u.id)}>{t(lang, "p_ad_approve")}</button>
+                      <button style={{ ...btn(), fontSize: 11, color: C.danger, borderColor: C.danger + "44" }} onClick={() => handleReject(u.id)}>{t(lang, "p_ad_reject")}</button>
                     </div>
                   </div>
                 ))}
@@ -3516,37 +3582,37 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
         {tab === "bookings" && (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
-              <h2 style={{ ...h2Style, margin: 0 }}>Prenotazioni — tutte le proprietà</h2>
+              <h2 style={{ ...h2Style, margin: 0 }}>{t(lang, "p_ad_bookings_all_properties")}</h2>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                <input placeholder="🔍 Cerca cliente..." style={{ ...input, width: 180, padding: "6px 12px" }} value={bkSearch} onChange={e => setBkSearch(e.target.value)} />
+                <input placeholder={t(lang, "p_cd_search_client")} style={{ ...input, width: 180, padding: "6px 12px" }} value={bkSearch} onChange={e => setBkSearch(e.target.value)} />
                 <select style={{ ...sel, width: 140, padding: "6px 12px" }} value={bkStatus} onChange={e => setBkStatus(e.target.value)}>
-                  <option value="">Tutti gli stati</option>
+                  <option value="">{t(lang, "p_filter_all_statuses")}</option>
                   {Object.entries(statusMap(lang)).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                 </select>
                 <select style={{ ...sel, width: 160, padding: "6px 12px" }} value={bkRoom} onChange={e => setBkRoom(e.target.value)}>
-                  <option value="">Tutte le unità</option>
+                  <option value="">{t(lang, "p_filter_all_rooms")}</option>
                   {(data.rooms || []).map((r: any) => {
                     const p = (data.properties || []).find((prop: any) => prop.id === r.property_id);
                     return <option key={r.id} value={r.id}>{p ? `${p.name} - ` : ""}{r.name}</option>;
                   })}
                 </select>
                 <select style={{ ...sel, width: 90, padding: "6px 12px" }} value={bkYear} onChange={e => setBkYear(e.target.value)}>
-                  <option value="">Anno</option>
+                  <option value="">{t(lang, "p_filter_year")}</option>
                   {YEARS.map(y => <option key={y} value={String(y)}>{y}</option>)}
                 </select>
                 <select style={{ ...sel, width: 110, padding: "6px 12px" }} value={bkMonth} onChange={e => setBkMonth(e.target.value)}>
-                  <option value="">Mese</option>
+                  <option value="">{t(lang, "p_filter_month")}</option>
                   {monthsList(lang).map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
                 </select>
               </div>
             </div>
 
-            {filteredBookings.length === 0 ? <div style={{ ...card, textAlign: "center", color: C.textDim }}>Nessuna prenotazione trovata.</div> : (
+            {filteredBookings.length === 0 ? <div style={{ ...card, textAlign: "center", color: C.textDim }}>{t(lang, "p_no_bookings_found")}</div> : (
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                   <thead>
                     <tr>
-                      {["Cliente", "Proprietà / Unità", "Date", "Owner", "Concierge/Agent", "Totale", "Status", "Azioni"].map(h => (
+                      {[t(lang, "p_common_client"), t(lang, "p_ad_th_property_unit"), t(lang, "p_th_dates"), t(lang, "p_common_owner"), t(lang, "p_ad_th_concierge_agent"), t(lang, "p_common_total"), t(lang, "p_common_status"), t(lang, "p_common_actions")].map(h => (
                         <th key={h} style={{ ...th, fontSize: 9 }}>{h}</th>
                       ))}
                     </tr>
@@ -3565,7 +3631,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                         </td>
                         <td style={{ ...td, whiteSpace: "nowrap" }}>
                           {formatDate(b.start_date)} → {formatDate(b.end_date)}
-                          <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
+                          <div style={{ fontSize: 9, color: C.textDim }}>({getDaysBetween(b.start_date, b.end_date)} {unitLabel(lang, b.asset_type, getDaysBetween(b.start_date, b.end_date))})</div>
                         </td>
                         <td style={{ ...td, fontSize: 10 }}>{owner?.nickname || "—"}</td>
                         <td style={{ ...td, fontSize: 10 }}>{concierge?.nickname || "—"}</td>
@@ -3576,7 +3642,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                           </select>
                         </td>
                         <td style={td}>
-                          <button style={{ ...btn(), fontSize: 10, padding: "4px 10px", color: C.danger, borderColor: C.danger + "44" }} onClick={() => handleAdminDeleteBooking(b.id)}>Elimina</button>
+                          <button style={{ ...btn(), fontSize: 10, padding: "4px 10px", color: C.danger, borderColor: C.danger + "44" }} onClick={() => handleAdminDeleteBooking(b.id)}>{t(lang, "p_common_delete")}</button>
                         </td>
                       </tr>
                     );
@@ -3590,8 +3656,8 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
         {tab === "manageassets" && (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-              <h2 style={{ ...h2Style, margin: 0 }}>Gestisci Asset — tutte le proprietà</h2>
-              <input placeholder="🔍 Cerca nome o zona..." style={{ ...input, width: 220, padding: "6px 12px" }} value={assetSearch} onChange={e => setAssetSearch(e.target.value)} />
+              <h2 style={{ ...h2Style, margin: 0 }}>{t(lang, "p_ad_manage_assets_all")}</h2>
+              <input placeholder={t(lang, "p_ad_search_name_zone")} style={{ ...input, width: 220, padding: "6px 12px" }} value={assetSearch} onChange={e => setAssetSearch(e.target.value)} />
             </div>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
@@ -3608,7 +3674,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
             </div>
 
             {filteredAssets.length === 0 ? (
-              <div style={{ ...card, textAlign: "center", color: C.textDim }}>Nessun asset trovato.</div>
+              <div style={{ ...card, textAlign: "center", color: C.textDim }}>{t(lang, "p_ad_no_assets_found")}</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {filteredAssets.map((prop: any) => {
@@ -3628,19 +3694,19 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                               <span style={badge(C.goldDark)}>{assetLabel(prop.asset_type)}</span>
                             </div>
                             <div style={{ fontSize: 12, color: C.textMuted }}>📍 {prop.location}</div>
-                            <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>Proprietario: {owner?.nickname || "—"} · {propRooms.length} unità · {images.length} foto</div>
+                            <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>{t(lang, "p_ad_owner_units_photos", { owner: owner?.nickname || "—", units: propRooms.length, photos: images.length })}</div>
                           </div>
                         </div>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <button style={{ ...btn(), padding: "6px 12px", fontSize: 11 }} onClick={() => setEditAsset({ id: prop.id, name: prop.name, location: prop.location, description: prop.description || "", asset_type: prop.asset_type || "apartment" })}>✏️ Modifica</button>
+                          <button style={{ ...btn(), padding: "6px 12px", fontSize: 11 }} onClick={() => setEditAsset({ id: prop.id, name: prop.name, location: prop.location, description: prop.description || "", asset_type: prop.asset_type || "apartment" })}>✏️ {t(lang, "p_common_edit")}</button>
                           <button
-                            title={prop.is_public === 0 ? "Nascosto dalla vetrina" : "Visibile in vetrina"}
+                            title={prop.is_public === 0 ? t(lang, "p_od_hidden_from_showcase") : t(lang, "p_od_visible_in_showcase")}
                             onClick={async () => { await togglePropertyPublic(prop.id, prop.is_public === 0); refresh(); }}
                             style={{ ...btn(), padding: "6px 12px", fontSize: 11, color: prop.is_public === 0 ? C.textDim : C.success }}>
-                            {prop.is_public === 0 ? "🔒 Nascosto" : "🌐 In vetrina"}
+                            {prop.is_public === 0 ? `🔒 ${t(lang, "p_od_hidden")}` : `🌐 ${t(lang, "p_od_in_showcase")}`}
                           </button>
-                          <button style={{ ...btn(), padding: "6px 10px", fontSize: 13, borderColor: C.danger + "55", color: C.danger }} title="Elimina proprietà"
-                            onClick={async () => { if (confirm(`Eliminare "${prop.name}" e tutte le sue camere/prenotazioni? Azione irreversibile.`)) { await deletePropertyAction(prop.id); refresh(); } }}>🗑</button>
+                          <button style={{ ...btn(), padding: "6px 10px", fontSize: 13, borderColor: C.danger + "55", color: C.danger }} title={t(lang, "p_od_delete_property_title")}
+                            onClick={async () => { if (confirm(t(lang, "p_od_confirm_delete_property", { name: prop.name }))) { await deletePropertyAction(prop.id); refresh(); } }}>🗑</button>
                         </div>
                       </div>
 
@@ -3649,7 +3715,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                         {images.map((img, idx) => (
                           <div key={idx} style={{ position: "relative", width: 64, height: 64, borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}` }}>
                             <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                            <button onClick={async () => { if (confirm("Eliminare questa foto?")) { await removePropertyImage(prop.id, idx); await refreshAssetGallery(prop.id); refresh(); } }}
+                            <button onClick={async () => { if (confirm(t(lang, "p_od_delete_photo_confirm"))) { await removePropertyImage(prop.id, idx); await refreshAssetGallery(prop.id); refresh(); } }}
                               style={{ position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,0.6)", color: "#FF4D4D", border: "none", borderRadius: "50%", width: 20, height: 20, cursor: "pointer", fontSize: 9 }}>✕</button>
                           </div>
                         ))}
@@ -3664,11 +3730,11 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                         {prop.pdf_name ? (
                           <>
                             <span style={{ fontSize: 12, color: C.gold }}>📄 {prop.pdf_name}</span>
-                            <button onClick={async () => { if (confirm("Rimuovere il PDF?")) { await removePropertyPdf(prop.id); refresh(); } }} style={{ ...btn(), padding: "3px 10px", fontSize: 10, color: C.danger, borderColor: C.danger + "55" }}>Rimuovi</button>
+                            <button onClick={async () => { if (confirm(t(lang, "p_od_remove_pdf_confirm"))) { await removePropertyPdf(prop.id); refresh(); } }} style={{ ...btn(), padding: "3px 10px", fontSize: 10, color: C.danger, borderColor: C.danger + "55" }}>{t(lang, "p_common_remove")}</button>
                           </>
                         ) : (
                           <label style={{ ...btn(), padding: "5px 12px", fontSize: 11, cursor: "pointer" }}>
-                            + Carica scheda PDF
+                            {t(lang, "p_od_upload_pdf")}
                             <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleAssetPdfUpload(prop.id, f); }} />
                           </label>
                         )}
@@ -3683,12 +3749,12 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                             <div key={room.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: C.surfaceAlt, borderRadius: 6, flexWrap: "wrap", gap: 8 }}>
                               <div style={{ fontSize: 12 }}>
                                 <strong style={{ color: C.text }}>{room.name}</strong>
-                                <span style={{ color: C.textDim, marginLeft: 8 }}>{room.capacity} ospiti{room.bedrooms ? ` · ${room.bedrooms} camere` : ""}{room.bathrooms ? ` · ${room.bathrooms} bagni` : ""}</span>
+                                <span style={{ color: C.textDim, marginLeft: 8 }}>{room.capacity} {t(lang, "guests")}{room.bedrooms ? ` · ${room.bedrooms} ${t(lang, "bedrooms")}` : ""}{room.bathrooms ? ` · ${room.bathrooms} ${t(lang, "bathrooms")}` : ""}</span>
                               </div>
                               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                {current && <span style={{ fontSize: 12, color: C.gold }}>€{current.base_price}{unitSuffix(prop.asset_type)}</span>}
-                                <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetRoom({ id: room.id, name: room.name, capacity: String(room.capacity), description: room.description || "", bedrooms: room.bedrooms != null ? String(room.bedrooms) : "", bathrooms: room.bathrooms != null ? String(room.bathrooms) : "" })}>✏️ Unità</button>
-                                {current && <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetPricing({ roomId: room.id, month: current.month, basePrice: String(current.base_price), cleaningFee: String(current.cleaning_fee) })}>💶 Prezzo</button>}
+                                {current && <span style={{ fontSize: 12, color: C.gold }}>€{current.base_price}{unitSuffix(lang, prop.asset_type)}</span>}
+                                <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetRoom({ id: room.id, name: room.name, capacity: String(room.capacity), description: room.description || "", bedrooms: room.bedrooms != null ? String(room.bedrooms) : "", bathrooms: room.bathrooms != null ? String(room.bathrooms) : "" })}>{t(lang, "p_ad_edit_unit_btn")}</button>
+                                {current && <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetPricing({ roomId: room.id, month: current.month, basePrice: String(current.base_price), cleaningFee: String(current.cleaning_fee) })}>{t(lang, "p_ad_edit_price_btn")}</button>}
                               </div>
                             </div>
                           );
@@ -3704,23 +3770,23 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
             {editAsset && (
               <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300 }} onClick={() => setEditAsset(null)}>
                 <div style={{ ...card, width: 440, maxWidth: "92vw" }} onClick={e => e.stopPropagation()}>
-                  <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>Modifica proprietà</h3>
-                  <div style={{ marginBottom: 12 }}><label style={label}>Nome</label><input style={input} value={editAsset.name} onChange={e => setEditAsset({ ...editAsset, name: e.target.value })} /></div>
-                  <div style={{ marginBottom: 12 }}><label style={label}>Località</label><input style={input} value={editAsset.location} onChange={e => setEditAsset({ ...editAsset, location: e.target.value })} /></div>
+                  <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>{t(lang, "p_od_edit_property_title")}</h3>
+                  <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_name")}</label><input style={input} value={editAsset.name} onChange={e => setEditAsset({ ...editAsset, name: e.target.value })} /></div>
+                  <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_location_label")}</label><input style={input} value={editAsset.location} onChange={e => setEditAsset({ ...editAsset, location: e.target.value })} /></div>
                   <div style={{ marginBottom: 12 }}>
-                    <label style={label}>Tipo asset</label>
+                    <label style={label}>{t(lang, "p_ad_asset_type_label")}</label>
                     <select style={sel} value={editAsset.asset_type} onChange={e => setEditAsset({ ...editAsset, asset_type: e.target.value })}>
                       {ASSET_TYPES.map(a => <option key={a.v} value={a.v}>{a.l}</option>)}
                     </select>
                   </div>
-                  <div style={{ marginBottom: 16 }}><label style={label}>Descrizione</label><textarea style={{ ...input, minHeight: 100 }} value={editAsset.description} onChange={e => setEditAsset({ ...editAsset, description: e.target.value })} /></div>
+                  <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_description")}</label><textarea style={{ ...input, minHeight: 100 }} value={editAsset.description} onChange={e => setEditAsset({ ...editAsset, description: e.target.value })} /></div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
                       await updatePropertyAction(editAsset.id, editAsset.name, editAsset.location, editAsset.description);
                       await updatePropertyAssetType(editAsset.id, editAsset.asset_type);
-                      setEditAsset(null); setMsg("Proprietà aggiornata"); refresh();
-                    }}>Salva</button>
-                    <button style={{ ...btn(), flex: 1 }} onClick={() => setEditAsset(null)}>Annulla</button>
+                      setEditAsset(null); setMsg(t(lang, "p_od_property_updated")); refresh();
+                    }}>{t(lang, "p_common_save")}</button>
+                    <button style={{ ...btn(), flex: 1 }} onClick={() => setEditAsset(null)}>{t(lang, "p_common_cancel")}</button>
                   </div>
                 </div>
               </div>
@@ -3730,20 +3796,20 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
             {editAssetRoom && (
               <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300 }} onClick={() => setEditAssetRoom(null)}>
                 <div style={{ ...card, width: 400, maxWidth: "92vw" }} onClick={e => e.stopPropagation()}>
-                  <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>Modifica unità</h3>
-                  <div style={{ marginBottom: 12 }}><label style={label}>Nome</label><input style={input} value={editAssetRoom.name} onChange={e => setEditAssetRoom({ ...editAssetRoom, name: e.target.value })} /></div>
-                  <div style={{ marginBottom: 12 }}><label style={label}>Capacità (ospiti)</label><input style={input} type="number" value={editAssetRoom.capacity} onChange={e => setEditAssetRoom({ ...editAssetRoom, capacity: e.target.value })} /></div>
+                  <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>{t(lang, "p_ad_edit_unit_title")}</h3>
+                  <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_name")}</label><input style={input} value={editAssetRoom.name} onChange={e => setEditAssetRoom({ ...editAssetRoom, name: e.target.value })} /></div>
+                  <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_ad_capacity_guests_label")}</label><input style={input} type="number" value={editAssetRoom.capacity} onChange={e => setEditAssetRoom({ ...editAssetRoom, capacity: e.target.value })} /></div>
                   <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-                    <div style={{ flex: 1 }}><label style={label}>Camere da letto</label><input style={input} type="number" value={editAssetRoom.bedrooms} onChange={e => setEditAssetRoom({ ...editAssetRoom, bedrooms: e.target.value })} /></div>
-                    <div style={{ flex: 1 }}><label style={label}>Bagni</label><input style={input} type="number" value={editAssetRoom.bathrooms} onChange={e => setEditAssetRoom({ ...editAssetRoom, bathrooms: e.target.value })} /></div>
+                    <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_bedrooms_label")}</label><input style={input} type="number" value={editAssetRoom.bedrooms} onChange={e => setEditAssetRoom({ ...editAssetRoom, bedrooms: e.target.value })} /></div>
+                    <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_bathrooms_label")}</label><input style={input} type="number" value={editAssetRoom.bathrooms} onChange={e => setEditAssetRoom({ ...editAssetRoom, bathrooms: e.target.value })} /></div>
                   </div>
-                  <div style={{ marginBottom: 16 }}><label style={label}>Descrizione</label><textarea style={{ ...input, minHeight: 80 }} value={editAssetRoom.description} onChange={e => setEditAssetRoom({ ...editAssetRoom, description: e.target.value })} /></div>
+                  <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_description")}</label><textarea style={{ ...input, minHeight: 80 }} value={editAssetRoom.description} onChange={e => setEditAssetRoom({ ...editAssetRoom, description: e.target.value })} /></div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
                       await updateRoomAction(editAssetRoom.id, editAssetRoom.name, Number(editAssetRoom.capacity), editAssetRoom.description, editAssetRoom.bedrooms ? Number(editAssetRoom.bedrooms) : null, editAssetRoom.bathrooms ? Number(editAssetRoom.bathrooms) : null);
-                      setEditAssetRoom(null); setMsg("Unità aggiornata"); refresh();
-                    }}>Salva</button>
-                    <button style={{ ...btn(), flex: 1 }} onClick={() => setEditAssetRoom(null)}>Annulla</button>
+                      setEditAssetRoom(null); setMsg(t(lang, "p_ad_unit_updated")); refresh();
+                    }}>{t(lang, "p_common_save")}</button>
+                    <button style={{ ...btn(), flex: 1 }} onClick={() => setEditAssetRoom(null)}>{t(lang, "p_common_cancel")}</button>
                   </div>
                 </div>
               </div>
@@ -3753,15 +3819,15 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
             {editAssetPricing && (
               <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300 }} onClick={() => setEditAssetPricing(null)}>
                 <div style={{ ...card, width: 360, maxWidth: "92vw" }} onClick={e => e.stopPropagation()}>
-                  <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>Modifica prezzo · {editAssetPricing.month}</h3>
-                  <div style={{ marginBottom: 12 }}><label style={label}>Prezzo base</label><input style={input} type="number" value={editAssetPricing.basePrice} onChange={e => setEditAssetPricing({ ...editAssetPricing, basePrice: e.target.value })} /></div>
-                  <div style={{ marginBottom: 16 }}><label style={label}>Pulizie</label><input style={input} type="number" value={editAssetPricing.cleaningFee} onChange={e => setEditAssetPricing({ ...editAssetPricing, cleaningFee: e.target.value })} /></div>
+                  <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>{t(lang, "p_ad_edit_price_title", { month: editAssetPricing.month })}</h3>
+                  <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_ad_base_price_label")}</label><input style={input} type="number" value={editAssetPricing.basePrice} onChange={e => setEditAssetPricing({ ...editAssetPricing, basePrice: e.target.value })} /></div>
+                  <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_cleaning_label")}</label><input style={input} type="number" value={editAssetPricing.cleaningFee} onChange={e => setEditAssetPricing({ ...editAssetPricing, cleaningFee: e.target.value })} /></div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
                       await updatePricingAction(editAssetPricing.roomId, editAssetPricing.month, Number(editAssetPricing.basePrice), Number(editAssetPricing.cleaningFee));
-                      setEditAssetPricing(null); setMsg("Prezzo aggiornato"); refresh();
-                    }}>Salva</button>
-                    <button style={{ ...btn(), flex: 1 }} onClick={() => setEditAssetPricing(null)}>Annulla</button>
+                      setEditAssetPricing(null); setMsg(t(lang, "p_ad_price_updated")); refresh();
+                    }}>{t(lang, "p_common_save")}</button>
+                    <button style={{ ...btn(), flex: 1 }} onClick={() => setEditAssetPricing(null)}>{t(lang, "p_common_cancel")}</button>
                   </div>
                 </div>
               </div>
@@ -3771,69 +3837,69 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 
         {tab === "addasset" && (
           <div>
-            <h2 style={h2Style}>Aggiungi Asset (Proprietà / Auto / Barca)</h2>
+            <h2 style={h2Style}>{t(lang, "p_ad_add_asset_title")}</h2>
             <div style={{ ...card, borderStyle: "dashed", background: "rgba(255,255,255,0.02)", borderColor: C.borderGold }}>
-              <h3 style={h3Style}>Proprietario</h3>
+              <h3 style={h3Style}>{t(lang, "p_common_owner")}</h3>
               <div style={{ display: "flex", gap: 20, marginBottom: 14 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.textMuted }}>
-                  <input type="radio" checked={naOwnerMode === "existing"} onChange={() => setNaOwnerMode("existing")} /> Utente esistente
+                  <input type="radio" checked={naOwnerMode === "existing"} onChange={() => setNaOwnerMode("existing")} /> {t(lang, "p_ad_existing_user")}
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.textMuted }}>
-                  <input type="radio" checked={naOwnerMode === "new"} onChange={() => setNaOwnerMode("new")} /> Crea nuovo
+                  <input type="radio" checked={naOwnerMode === "new"} onChange={() => setNaOwnerMode("new")} /> {t(lang, "p_ad_create_new")}
                 </label>
               </div>
               {naOwnerMode === "existing" ? (
                 <select style={sel} value={naOwnerId} onChange={e => setNaOwnerId(e.target.value)}>
-                  <option value="">— Seleziona proprietario / concierge —</option>
+                  <option value="">{t(lang, "p_ad_select_owner_concierge")}</option>
                   {allUsers.filter(u => ["owner", "concierge", "agent"].includes(u.role)).map(u => (
                     <option key={u.id} value={u.id}>{roleIcon(u.role)} {u.nickname}</option>
                   ))}
                 </select>
               ) : (
                 <div style={grid(2)}>
-                  <div><label style={label}>Nickname</label><input style={input} value={naNewNick} onChange={e => setNaNewNick(e.target.value)} placeholder="es. classyibiza" /></div>
+                  <div><label style={label}>{t(lang, "p_nickname")}</label><input style={input} value={naNewNick} onChange={e => setNaNewNick(e.target.value)} placeholder="es. classyibiza" /></div>
                   <div>
-                    <label style={label}>Ruolo</label>
+                    <label style={label}>{t(lang, "p_ad_role")}</label>
                     <select style={sel} value={naNewRole} onChange={e => setNaNewRole(e.target.value as any)}>
-                      <option value="owner">🏠 Owner</option>
-                      <option value="concierge">🤵 Concierge</option>
+                      <option value="owner">🏠 {t(lang, "p_role_owner")}</option>
+                      <option value="concierge">🤵 {t(lang, "p_role_concierge")}</option>
                     </select>
                   </div>
                 </div>
               )}
 
-              <h3 style={{ ...h3Style, marginTop: 24 }}>Dati Asset</h3>
+              <h3 style={{ ...h3Style, marginTop: 24 }}>{t(lang, "p_ad_asset_data")}</h3>
               <div style={grid(2)}>
-                <div><label style={label}>Nome</label><input style={input} value={naName} onChange={e => setNaName(e.target.value)} placeholder="es. Villa Roca" /></div>
-                <div><label style={label}>Località / Porto / Garage</label><input style={input} value={naLoc} onChange={e => setNaLoc(e.target.value)} placeholder="Città, Zona, Porto" /></div>
+                <div><label style={label}>{t(lang, "p_od_name")}</label><input style={input} value={naName} onChange={e => setNaName(e.target.value)} placeholder="es. Villa Roca" /></div>
+                <div><label style={label}>{t(lang, "p_od_location_ph_label")}</label><input style={input} value={naLoc} onChange={e => setNaLoc(e.target.value)} placeholder="Città, Zona, Porto" /></div>
               </div>
               <div style={{ ...grid(2), marginTop: 12 }}>
                 <div>
-                  <label style={label}>Tipo</label>
+                  <label style={label}>{t(lang, "p_od_type")}</label>
                   <select style={sel} value={naAssetType} onChange={e => setNaAssetType(e.target.value)}>
                     {ASSET_TYPES.map(a => <option key={a.v} value={a.v}>{a.l}</option>)}
                   </select>
                 </div>
-                <div><label style={label}>Capienza (ospiti / posti)</label><input style={input} type="number" min="1" value={naCapacity} onChange={e => setNaCapacity(e.target.value)} /></div>
+                <div><label style={label}>{t(lang, "p_ad_capacity_guests_seats")}</label><input style={input} type="number" min="1" value={naCapacity} onChange={e => setNaCapacity(e.target.value)} /></div>
               </div>
               <div style={{ marginTop: 12 }}>
-                <label style={label}>Descrizione</label>
-                <textarea style={{ ...input, minHeight: 80, fontSize: 12 }} value={naDesc} onChange={e => setNaDesc(e.target.value)} placeholder="Breve descrizione..." />
+                <label style={label}>{t(lang, "p_od_description")}</label>
+                <textarea style={{ ...input, minHeight: 80, fontSize: 12 }} value={naDesc} onChange={e => setNaDesc(e.target.value)} placeholder={t(lang, "p_ad_brief_desc_ph")} />
               </div>
               <div style={{ marginTop: 12 }}>
-                <label style={label}>Concierge collaboratore (opzionale)</label>
-                <input style={input} value={naConciergeNick} onChange={e => setNaConciergeNick(e.target.value)} placeholder="nickname concierge da collegare a questo asset" />
+                <label style={label}>{t(lang, "p_ad_concierge_collab_optional")}</label>
+                <input style={input} value={naConciergeNick} onChange={e => setNaConciergeNick(e.target.value)} placeholder={t(lang, "p_ad_concierge_nick_ph")} />
               </div>
 
-              <h3 style={{ ...h3Style, marginTop: 24 }}>Prezzi per stagione (a{unitSuffix(naAssetType)})</h3>
+              <h3 style={{ ...h3Style, marginTop: 24 }}>{t(lang, "p_ad_seasonal_prices", { unit: unitSuffix(lang, naAssetType).replace("/", "") })}</h3>
               <div style={grid(2)}>
-                <div><label style={label}>Bassa stagione (€)</label><input style={input} type="number" value={naPriceLow} onChange={e => setNaPriceLow(e.target.value)} /></div>
-                <div><label style={label}>Media stagione — giu/set (€)</label><input style={input} type="number" value={naPriceMid} onChange={e => setNaPriceMid(e.target.value)} placeholder="default = bassa" /></div>
-                <div><label style={label}>Alta stagione — lug/ago (€)</label><input style={input} type="number" value={naPriceHigh} onChange={e => setNaPriceHigh(e.target.value)} placeholder="default = bassa" /></div>
-                <div><label style={label}>Cleaning fee (€)</label><input style={input} type="number" value={naCleaningFee} onChange={e => setNaCleaningFee(e.target.value)} /></div>
+                <div><label style={label}>{t(lang, "p_ad_low_season")}</label><input style={input} type="number" value={naPriceLow} onChange={e => setNaPriceLow(e.target.value)} /></div>
+                <div><label style={label}>{t(lang, "p_ad_mid_season")}</label><input style={input} type="number" value={naPriceMid} onChange={e => setNaPriceMid(e.target.value)} placeholder={t(lang, "p_ad_default_low")} /></div>
+                <div><label style={label}>{t(lang, "p_ad_high_season")}</label><input style={input} type="number" value={naPriceHigh} onChange={e => setNaPriceHigh(e.target.value)} placeholder={t(lang, "p_ad_default_low")} /></div>
+                <div><label style={label}>{t(lang, "p_ad_cleaning_fee_eur")}</label><input style={input} type="number" value={naCleaningFee} onChange={e => setNaCleaningFee(e.target.value)} /></div>
               </div>
 
-              <h3 style={{ ...h3Style, marginTop: 24 }}>Foto</h3>
+              <h3 style={{ ...h3Style, marginTop: 24 }}>{t(lang, "p_ad_photos")}</h3>
               <input type="file" accept="image/*" multiple onChange={e => { if (e.target.files) handleNaImageFiles(e.target.files); }} />
               {naImages.length > 0 && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
@@ -3846,14 +3912,14 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                 </div>
               )}
 
-              <h3 style={{ ...h3Style, marginTop: 24 }}>Scheda PDF (opzionale)</h3>
+              <h3 style={{ ...h3Style, marginTop: 24 }}>{t(lang, "p_ad_pdf_sheet_optional")}</h3>
               <input type="file" accept="application/pdf" onChange={e => { const f = e.target.files?.[0]; if (f) handleNaPdfFile(f); }} />
               {naPdf && (
                 <div style={{ fontSize: 12, color: C.gold, marginTop: 8 }}>📄 {naPdf.name} <span style={{ cursor: "pointer", opacity: 0.7 }} onClick={() => setNaPdf(null)}>✕</span></div>
               )}
 
-              <div style={{ fontSize: 11, color: C.textDim, marginTop: 18 }}>L'asset sarà pubblicato subito, visibile in vetrina pubblica.</div>
-              <button style={{ ...btn("gold"), marginTop: 12 }} disabled={naSubmitting} onClick={handleAddAsset}>{naSubmitting ? "Creazione in corso..." : "Crea Asset"}</button>
+              <div style={{ fontSize: 11, color: C.textDim, marginTop: 18 }}>{t(lang, "p_ad_asset_publish_note")}</div>
+              <button style={{ ...btn("gold"), marginTop: 12 }} disabled={naSubmitting} onClick={handleAddAsset}>{naSubmitting ? t(lang, "p_ad_creating") : t(lang, "p_ad_create_asset")}</button>
             </div>
           </div>
         )}
@@ -3861,8 +3927,8 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
         {tab === "users" && (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-              <h2 style={{ ...h2Style, marginBottom: 0 }}>Gestione Utenti</h2>
-              <div style={{ fontSize: 12, color: C.textDim }}>{allUsers.length} utenti totali</div>
+              <h2 style={{ ...h2Style, marginBottom: 0 }}>{t(lang, "p_ad_user_management")}</h2>
+              <div style={{ fontSize: 12, color: C.textDim }}>{t(lang, "p_ad_total_users", { n: allUsers.length })}</div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {allUsers.filter((u: any) => u.id !== user.id).map((u: any) => {
@@ -3903,23 +3969,23 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                             </div>
                           )}
                           {!u.email && !u.phone && (
-                            <div style={{ fontSize: 11, color: C.textDim, fontStyle: "italic" }}>Nessun contatto registrato</div>
+                            <div style={{ fontSize: 11, color: C.textDim, fontStyle: "italic" }}>{t(lang, "p_ad_no_contact")}</div>
                           )}
                         </div>
                       </div>
 
                       {/* Colonna centrale: dettagli ruolo + servizi */}
                       <div style={{ flex: 1, minWidth: 200 }}>
-                        <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 10 }}>Profilo</div>
+                        <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 10 }}>{t(lang, "p_ad_profile_label")}</div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11, marginBottom: 12 }}>
-                          <div><span style={{ color: C.textDim }}>Ruolo</span><br /><strong style={{ color: C.text }}>{roleIcon(u.role)} {u.role}</strong></div>
-                          <div><span style={{ color: C.textDim }}>Registrato</span><br /><strong style={{ color: C.text }}>{new Date(u.created_at).toLocaleDateString("it-IT")}</strong></div>
-                          {u.managed_by && <div><span style={{ color: C.textDim }}>Gestito da</span><br /><strong style={{ color: C.text }}>{u.managed_by}</strong></div>}
-                          {userProps.length > 0 && <div><span style={{ color: C.textDim }}>Proprietà</span><br /><strong style={{ color: C.success }}>{userProps.length}</strong></div>}
+                          <div><span style={{ color: C.textDim }}>{t(lang, "p_ad_role")}</span><br /><strong style={{ color: C.text }}>{roleIcon(u.role)} {u.role}</strong></div>
+                          <div><span style={{ color: C.textDim }}>{t(lang, "p_ad_registered")}</span><br /><strong style={{ color: C.text }}>{new Date(u.created_at).toLocaleDateString("it-IT")}</strong></div>
+                          {u.managed_by && <div><span style={{ color: C.textDim }}>{t(lang, "p_ad_managed_by")}</span><br /><strong style={{ color: C.text }}>{u.managed_by}</strong></div>}
+                          {userProps.length > 0 && <div><span style={{ color: C.textDim }}>{t(lang, "p_svc_properties")}</span><br /><strong style={{ color: C.success }}>{userProps.length}</strong></div>}
                         </div>
                         {services.length > 0 && (
                           <div>
-                            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>Servizi offerti</div>
+                            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>{t(lang, "p_services_offered")}</div>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                               {services.map((s: string) => (
                                 <span key={s} style={{ padding: "3px 10px", borderRadius: 20, background: C.surfaceAlt, border: `1px solid ${C.border}`, fontSize: 10, color: C.textMuted }}>{s}</span>
@@ -3929,10 +3995,10 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                         )}
                         {agentCollabs.length > 0 && (
                           <div style={{ marginTop: 10 }}>
-                            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>Collaborazioni agente</div>
+                            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>{t(lang, "p_ad_agent_collabs")}</div>
                             {agentCollabs.map((c: any) => (
                               <div key={c.id} style={{ fontSize: 11, color: C.textMuted }}>
-                                {c.concierge_id === u.id ? `→ Agente: ${c.agent_nickname}` : `← Concierge: ${c.concierge_nickname}`}
+                                {c.concierge_id === u.id ? t(lang, "p_ad_arrow_agent", { name: c.agent_nickname }) : t(lang, "p_ad_arrow_concierge", { name: c.concierge_nickname })}
                                 <span style={{ color: C.gold, marginLeft: 6 }}>{c.commission_rate}%</span>
                               </div>
                             ))}
@@ -3943,15 +4009,15 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                       {/* Colonna destra: azioni */}
                       <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 150 }}>
                         <div>
-                          <label style={{ ...label, marginBottom: 4 }}>Cambia ruolo</label>
+                          <label style={{ ...label, marginBottom: 4 }}>{t(lang, "p_ad_change_role")}</label>
                           <select style={{ ...sel, padding: "6px 10px", fontSize: 11 }} value={u.role} onChange={e => handleRoleChange(u.id, e.target.value)}>
                             {["owner", "concierge", "agent", "admin"].map(r => <option key={r} value={r}>{r}</option>)}
                           </select>
                         </div>
                         {u.email && (
-                          <a href={`mailto:${u.email}`} style={{ ...btn(), textDecoration: "none", textAlign: "center", padding: "7px 12px", fontSize: 10 }}>✉ Scrivi email</a>
+                          <a href={`mailto:${u.email}`} style={{ ...btn(), textDecoration: "none", textAlign: "center", padding: "7px 12px", fontSize: 10 }}>{t(lang, "p_ad_write_email")}</a>
                         )}
-                        <button style={{ ...btn(), fontSize: 10, padding: "7px 12px", color: C.danger, borderColor: C.danger + "44" }} onClick={() => handleDeleteUser(u.id, u.nickname)}>🗑 Elimina utente</button>
+                        <button style={{ ...btn(), fontSize: 10, padding: "7px 12px", color: C.danger, borderColor: C.danger + "44" }} onClick={() => handleDeleteUser(u.id, u.nickname)}>{t(lang, "p_ad_delete_user_btn")}</button>
                       </div>
                     </div>
                   </div>
@@ -3964,22 +4030,22 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
         {tab === "requests" && (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-              <h2 style={h2Style}>Richieste dal Sito</h2>
+              <h2 style={h2Style}>{t(lang, "p_ad_site_requests")}</h2>
               <div style={{ display: "flex", gap: 8 }}>
                 {["all","new","read","replied","declined"].map(s => (
                   <button key={s} onClick={() => setReqFilter(s)} style={{ ...btn(reqFilter === s ? "gold" : "default"), padding: "6px 14px", fontSize: 10 }}>
-                    {s === "all" ? "Tutte" : s === "new" ? "Nuove" : s === "read" ? "Lette" : s === "replied" ? "Risposte" : "Rifiutate"}
+                    {s === "all" ? t(lang, "p_ad_filter_all") : s === "new" ? t(lang, "p_ad_filter_new") : s === "read" ? t(lang, "p_ad_filter_read") : s === "replied" ? t(lang, "p_ad_filter_replied") : t(lang, "p_ad_filter_declined")}
                   </button>
                 ))}
               </div>
             </div>
             {bookingReqs.filter((r: any) => reqFilter === "all" || r.status === reqFilter).length === 0 ? (
-              <div style={{ ...card, textAlign: "center", color: C.textDim, padding: 48 }}>Nessuna richiesta trovata.</div>
+              <div style={{ ...card, textAlign: "center", color: C.textDim, padding: 48 }}>{t(lang, "p_ad_no_requests_found")}</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {bookingReqs.filter((r: any) => reqFilter === "all" || r.status === reqFilter).map((req: any) => {
                   const statusColors: Record<string, string> = { new: C.warning, read: C.info, replied: C.success, declined: C.danger };
-                  const statusLabels: Record<string, string> = { new: "Nuova", read: "Letta", replied: "Risposta inviata", declined: "Rifiutata" };
+                  const statusLabels: Record<string, string> = { new: t(lang, "p_ad_status_new"), read: t(lang, "p_ad_status_read"), replied: t(lang, "p_ad_status_replied_full"), declined: t(lang, "p_ad_status_declined") };
                   const split = req.platform_fee_rate > 0 && req.guests
                     ? null // full calc needs total which we don't have yet
                     : null;
@@ -3990,29 +4056,29 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
                             <div style={{ fontFamily: FONT, fontSize: 18, color: C.goldLight }}>{req.client_name}</div>
                             <span style={badge(statusColors[req.status] || C.textDim)}>{statusLabels[req.status] || req.status}</span>
-                            {req.referral_code && <span style={{ ...badge(C.info), gap: 4 }}>🤝 via {req.referral_code}</span>}
+                            {req.referral_code && <span style={{ ...badge(C.info), gap: 4 }}>🤝 {t(lang, "p_ad_via")} {req.referral_code}</span>}
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8, fontSize: 12 }}>
-                            {req.property_name && <div><span style={{ color: C.textDim }}>Proprietà:</span> <strong style={{ color: C.text }}>{req.property_name}</strong></div>}
-                            {req.room_name && <div><span style={{ color: C.textDim }}>Unità:</span> <strong style={{ color: C.text }}>{req.room_name}</strong></div>}
-                            {req.client_email && <div><span style={{ color: C.textDim }}>Email:</span> <a href={`mailto:${req.client_email}`} style={{ color: C.gold }}>{req.client_email}</a></div>}
-                            {req.client_phone && <div><span style={{ color: C.textDim }}>Tel:</span> <a href={`tel:${req.client_phone}`} style={{ color: C.gold }}>{req.client_phone}</a></div>}
-                            {req.check_in && <div><span style={{ color: C.textDim }}>Check-in:</span> <strong>{req.check_in}</strong></div>}
-                            {req.check_out && <div><span style={{ color: C.textDim }}>Check-out:</span> <strong>{req.check_out}</strong></div>}
-                            {req.guests > 1 && <div><span style={{ color: C.textDim }}>Ospiti:</span> <strong>{req.guests}</strong></div>}
-                            {req.platform_fee_rate > 0 && <div><span style={{ color: C.textDim }}>Comm. piattaforma:</span> <strong style={{ color: C.gold }}>{req.platform_fee_rate}%</strong></div>}
+                            {req.property_name && <div><span style={{ color: C.textDim }}>{t(lang, "p_ad_property_label")}</span> <strong style={{ color: C.text }}>{req.property_name}</strong></div>}
+                            {req.room_name && <div><span style={{ color: C.textDim }}>{t(lang, "p_ad_unit_label")}</span> <strong style={{ color: C.text }}>{req.room_name}</strong></div>}
+                            {req.client_email && <div><span style={{ color: C.textDim }}>{t(lang, "p_email")}:</span> <a href={`mailto:${req.client_email}`} style={{ color: C.gold }}>{req.client_email}</a></div>}
+                            {req.client_phone && <div><span style={{ color: C.textDim }}>{t(lang, "p_ad_tel_label")}</span> <a href={`tel:${req.client_phone}`} style={{ color: C.gold }}>{req.client_phone}</a></div>}
+                            {req.check_in && <div><span style={{ color: C.textDim }}>{t(lang, "req_checkin")}:</span> <strong>{req.check_in}</strong></div>}
+                            {req.check_out && <div><span style={{ color: C.textDim }}>{t(lang, "req_checkout")}:</span> <strong>{req.check_out}</strong></div>}
+                            {req.guests > 1 && <div><span style={{ color: C.textDim }}>{t(lang, "p_ad_guests_label")}</span> <strong>{req.guests}</strong></div>}
+                            {req.platform_fee_rate > 0 && <div><span style={{ color: C.textDim }}>{t(lang, "p_ad_platform_comm_label")}</span> <strong style={{ color: C.gold }}>{req.platform_fee_rate}%</strong></div>}
                           </div>
                           {req.message && <div style={{ marginTop: 12, padding: "10px 14px", background: C.surfaceAlt, borderRadius: 8, fontSize: 12, color: C.textMuted, fontStyle: "italic", borderLeft: `2px solid ${C.border}` }}>"{req.message}"</div>}
-                          <div style={{ fontSize: 10, color: C.textDim, marginTop: 8 }}>Ricevuta il {new Date(req.created_at).toLocaleDateString("it-IT", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>
+                          <div style={{ fontSize: 10, color: C.textDim, marginTop: 8 }}>{t(lang, "p_ad_received_on")} {new Date(req.created_at).toLocaleDateString("it-IT", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 120 }}>
                           <select style={{ ...sel, padding: "6px 10px", fontSize: 11 }} value={req.status} onChange={async e => { await updateBookingRequestStatus(req.id, e.target.value); getBookingRequests().then(setBookingReqs); }}>
-                            <option value="new">Nuova</option>
-                            <option value="read">Letta</option>
-                            <option value="replied">Risposta inviata</option>
-                            <option value="declined">Rifiutata</option>
+                            <option value="new">{t(lang, "p_ad_status_new")}</option>
+                            <option value="read">{t(lang, "p_ad_status_read")}</option>
+                            <option value="replied">{t(lang, "p_ad_status_replied_full")}</option>
+                            <option value="declined">{t(lang, "p_ad_status_declined")}</option>
                           </select>
-                          {req.client_email && <a href={`mailto:${req.client_email}?subject=Aura Ibiza – Risposta alla tua richiesta`} style={{ ...btn("gold"), textDecoration: "none", textAlign: "center", padding: "7px 12px", fontSize: 10 }}>✉ Rispondi</a>}
+                          {req.client_email && <a href={`mailto:${req.client_email}?subject=${encodeURIComponent(t(lang, "p_ad_email_reply_subject"))}`} style={{ ...btn("gold"), textDecoration: "none", textAlign: "center", padding: "7px 12px", fontSize: 10 }}>{t(lang, "p_ad_reply_btn")}</a>}
                           {req.client_phone && <a href={`https://wa.me/${req.client_phone.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{ ...btn(), textDecoration: "none", textAlign: "center", padding: "7px 12px", fontSize: 10, borderColor: "#25D366", color: "#25D366" }}>WhatsApp</a>}
                         </div>
                       </div>
@@ -4026,76 +4092,76 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 
         {tab === "platform" && (
           <div>
-            <h2 style={h2Style}>Commissioni Piattaforma</h2>
+            <h2 style={h2Style}>{t(lang, "p_ad_platform_commissions_title")}</h2>
             <p style={{ color: C.textDim, fontSize: 13, marginBottom: 28, lineHeight: 1.7 }}>
-              Configura la percentuale che la piattaforma trattiene su ogni prenotazione. La commissione si applica sull&apos;importo owner (non sulla fee concierge).<br />
-              <strong style={{ color: C.gold }}>Priorità:</strong> Owner+Tipo &gt; Solo Owner &gt; Solo Tipo &gt; Default globale
+              {t(lang, "p_ad_platform_comm_desc")}<br />
+              <strong style={{ color: C.gold }}>{t(lang, "p_ad_priority_label")}</strong> {t(lang, "p_ad_priority_order")}
             </p>
 
             {/* Add new commission */}
             <div style={{ ...card, borderColor: C.borderGold, marginBottom: 28 }}>
-              <h3 style={h3Style}>Aggiungi / Aggiorna Regola</h3>
+              <h3 style={h3Style}>{t(lang, "p_ad_add_update_rule")}</h3>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 120px auto", gap: 12, alignItems: "flex-end" }}>
                 <div>
-                  <label style={label}>Owner</label>
+                  <label style={label}>{t(lang, "p_common_owner")}</label>
                   <select style={sel} value={newCommOwnerId} onChange={e => setNewCommOwnerId(e.target.value)}>
-                    <option value="__global__">🌐 Default globale</option>
+                    <option value="__global__">{t(lang, "p_ad_global_default")}</option>
                     {(data.users || []).filter((u: any) => u.role === "owner").map((u: any) => (
                       <option key={u.id} value={u.id}>🏠 {u.nickname}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label style={label}>Tipo asset</label>
+                  <label style={label}>{t(lang, "p_ad_asset_type_label")}</label>
                   <select style={sel} value={newCommAssetType} onChange={e => setNewCommAssetType(e.target.value)}>
-                    <option value="__all__">Tutti i tipi</option>
-                    <option value="apartment">🏠 Appartamento</option>
-                    <option value="villa">🏡 Villa</option>
-                    <option value="boat">⛵ Barca</option>
-                    <option value="car">🚗 Auto</option>
-                    <option value="scooter">🛵 Scooter</option>
+                    <option value="__all__">{t(lang, "p_ad_all_types")}</option>
+                    <option value="apartment">{t(lang, "p_ad_type_apartment")}</option>
+                    <option value="villa">{t(lang, "p_ad_type_villa")}</option>
+                    <option value="boat">{t(lang, "p_ad_type_boat")}</option>
+                    <option value="car">{t(lang, "p_ad_type_car")}</option>
+                    <option value="scooter">{t(lang, "p_ad_type_scooter")}</option>
                   </select>
                 </div>
                 <div>
-                  <label style={label}>% Commissione</label>
-                  <input style={input} type="number" min="0" max="50" step="0.5" value={newCommRate} onChange={e => setNewCommRate(e.target.value)} placeholder="es. 10" />
+                  <label style={label}>{t(lang, "p_ad_pct_commission")}</label>
+                  <input style={input} type="number" min="0" max="50" step="0.5" value={newCommRate} onChange={e => setNewCommRate(e.target.value)} placeholder={t(lang, "p_ad_eg_10")} />
                 </div>
                 <div>
                   <button style={{ ...btn("gold"), padding: "11px 20px" }} onClick={async () => {
                     const ownerId = newCommOwnerId === "__global__" ? null : newCommOwnerId;
                     const assetType = newCommAssetType === "__all__" ? null : newCommAssetType;
                     const rate = parseFloat(newCommRate);
-                    if (isNaN(rate) || rate < 0) { setMsg("⚠ Percentuale non valida"); return; }
+                    if (isNaN(rate) || rate < 0) { setMsg(t(lang, "p_ad_invalid_percentage")); return; }
                     const res = await upsertPlatformCommission(ownerId, assetType, rate);
-                    if ((res as any).success) { setMsg("Regola salvata"); getPlatformCommissions().then(setPlatComms); }
-                    else setMsg("⚠ Errore: " + (res as any).error);
-                  }}>Salva Regola</button>
+                    if ((res as any).success) { setMsg(t(lang, "p_ad_rule_saved")); getPlatformCommissions().then(setPlatComms); }
+                    else setMsg(t(lang, "p_ad_error_prefix", { error: (res as any).error }));
+                  }}>{t(lang, "p_ad_save_rule")}</button>
                 </div>
               </div>
             </div>
 
             {/* Commission rules table */}
             {platComms.length === 0 ? (
-              <div style={{ ...card, textAlign: "center", color: C.textDim, padding: 40 }}>Nessuna regola configurata. Aggiungi un default globale per iniziare.</div>
+              <div style={{ ...card, textAlign: "center", color: C.textDim, padding: 40 }}>{t(lang, "p_ad_no_rules_configured")}</div>
             ) : (
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead><tr>
-                    {["Owner", "Tipo Asset", "Commissione %", "Esempio su €1000", ""].map(h => <th key={h} style={th}>{h}</th>)}
+                    {[t(lang, "p_common_owner"), t(lang, "p_ad_asset_type_label"), t(lang, "p_ad_th_commission_pct"), t(lang, "p_ad_th_example_1000"), ""].map(h => <th key={h} style={th}>{h}</th>)}
                   </tr></thead>
                   <tbody>
                     {platComms.map((c: any) => (
                       <tr key={c.id}>
-                        <td style={td}>{c.owner_nickname ? <><span style={{ color: C.gold }}>🏠 {c.owner_nickname}</span></> : <span style={{ color: C.textDim }}>🌐 Default globale</span>}</td>
-                        <td style={td}>{c.asset_type ? <span style={{ color: C.text }}>{c.asset_type}</span> : <span style={{ color: C.textDim }}>Tutti i tipi</span>}</td>
+                        <td style={td}>{c.owner_nickname ? <><span style={{ color: C.gold }}>🏠 {c.owner_nickname}</span></> : <span style={{ color: C.textDim }}>{t(lang, "p_ad_global_default")}</span>}</td>
+                        <td style={td}>{c.asset_type ? <span style={{ color: C.text }}>{c.asset_type}</span> : <span style={{ color: C.textDim }}>{t(lang, "p_ad_all_types")}</span>}</td>
                         <td style={{ ...td, fontFamily: FONT, fontSize: 18, color: C.gold }}>{c.rate}%</td>
                         <td style={td}>
                           <div style={{ fontSize: 11, lineHeight: 1.8 }}>
-                            <div>Owner incassa: <strong style={{ color: C.success }}>€{(1000 - 1000 * c.rate / 100).toFixed(0)}</strong></div>
-                            <div>Piattaforma: <strong style={{ color: C.gold }}>€{(1000 * c.rate / 100).toFixed(0)}</strong></div>
+                            <div>{t(lang, "p_ad_owner_receives")} <strong style={{ color: C.success }}>€{(1000 - 1000 * c.rate / 100).toFixed(0)}</strong></div>
+                            <div>{t(lang, "p_ad_platform_label")} <strong style={{ color: C.gold }}>€{(1000 * c.rate / 100).toFixed(0)}</strong></div>
                           </div>
                         </td>
-                        <td style={td}><button style={{ ...btn(), color: C.danger, padding: "4px 10px", fontSize: 10, borderColor: C.danger + "44" }} onClick={async () => { await deletePlatformCommission(c.id); getPlatformCommissions().then(setPlatComms); setMsg("Regola eliminata"); }}>Elimina</button></td>
+                        <td style={td}><button style={{ ...btn(), color: C.danger, padding: "4px 10px", fontSize: 10, borderColor: C.danger + "44" }} onClick={async () => { await deletePlatformCommission(c.id); getPlatformCommissions().then(setPlatComms); setMsg(t(lang, "p_ad_rule_deleted")); }}>{t(lang, "p_common_delete")}</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -4105,12 +4171,12 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 
             {/* Referral info box */}
             <div style={{ ...card, marginTop: 28, background: C.goldGlow, borderColor: C.borderGold }}>
-              <h3 style={h3Style}>🔗 Come funziona il referral</h3>
+              <h3 style={h3Style}>{t(lang, "p_ad_referral_how_title")}</h3>
               <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 2 }}>
-                <div>• Ogni concierge/agente ha un link referral personale: <code style={{ color: C.gold, background: C.surfaceAlt, padding: "2px 8px", borderRadius: 4 }}>auraibiza.com?ref=<em>nickname</em></code></div>
-                <div>• Il cliente arriva sul sito, clicca "Richiedi" — la richiesta viene associata automaticamente all&apos;agente</div>
-                <div>• La piattaforma incassa il totale e distribuisce: owner (prezzo base − commissione piattaforma) + concierge/agente (fee referral) + piattaforma (commissione %)</div>
-                <div>• Lo split viene calcolato e registrato in ogni prenotazione nella sezione pagamenti</div>
+                <div>• {t(lang, "p_ad_referral_b1")} <code style={{ color: C.gold, background: C.surfaceAlt, padding: "2px 8px", borderRadius: 4 }}>auraibiza.com?ref=<em>nickname</em></code></div>
+                <div>• {t(lang, "p_ad_referral_b2")}</div>
+                <div>• {t(lang, "p_ad_referral_b3")}</div>
+                <div>• {t(lang, "p_ad_referral_b4")}</div>
               </div>
             </div>
           </div>
@@ -4118,8 +4184,8 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 
         {tab === "commissions" && (
           <div>
-            <h2 style={h2Style}>Regole di Commissione</h2>
-            <p style={{ color: C.textDim, fontSize: 12, marginBottom: 20 }}>Configura la percentuale che ogni agente/concierge deve cedere al suo superiore diretto. La regola si applica sulla fee maturata da ogni prenotazione.</p>
+            <h2 style={h2Style}>{t(lang, "p_ad_commission_rules_title")}</h2>
+            <p style={{ color: C.textDim, fontSize: 12, marginBottom: 20 }}>{t(lang, "p_ad_commission_rules_desc")}</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {allUsers.filter((u: any) => ["concierge", "agent"].includes(u.role) && u.status === 'active').map((u: any) => {
                 const rule = commissionRules.find((r: any) => r.user_id === u.id);
@@ -4131,11 +4197,11 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                       <div style={{ fontSize: 10, color: C.textDim }}>{roleIcon(u.role)} {u.role}</div>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <label style={{ ...label, fontSize: 9 }}>Split % verso superiore</label>
+                      <label style={{ ...label, fontSize: 9 }}>{t(lang, "p_ad_split_pct_label")}</label>
                       <input style={{ ...input, width: 100 }} type="number" min="0" max="100" placeholder="es. 20" value={current} onChange={e => setCommRates(prev => ({ ...prev, [u.id]: e.target.value }))} />
                     </div>
-                    <button style={btn("gold")} onClick={() => handleSaveCommission(u.id)}>Salva</button>
-                    {rule && <span style={{ fontSize: 11, color: C.success }}>Attuale: {rule.rate}%</span>}
+                    <button style={btn("gold")} onClick={() => handleSaveCommission(u.id)}>{t(lang, "p_common_save")}</button>
+                    {rule && <span style={{ fontSize: 11, color: C.success }}>{t(lang, "p_ad_current_pct", { rate: rule.rate })}</span>}
                   </div>
                 );
               })}
@@ -4145,14 +4211,14 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 
         {tab === "overview" && (
           <div>
-            <h2 style={h2Style}>Overview Piattaforma</h2>
+            <h2 style={h2Style}>{t(lang, "p_ad_overview_title")}</h2>
 
             {/* Admin referral link */}
             <div style={{ ...card, background: C.goldGlow, borderColor: C.borderGold, marginBottom: 24 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                 <div>
-                  <h3 style={{ ...h3Style, marginBottom: 4 }}>🔗 Il Tuo Link Referral Admin</h3>
-                  <p style={{ fontSize: 12, color: C.textMuted }}>Usa questo link per portare clienti direttamente sulla vetrina con il tuo codice referral.</p>
+                  <h3 style={{ ...h3Style, marginBottom: 4 }}>{t(lang, "p_ad_admin_referral_title")}</h3>
+                  <p style={{ fontSize: 12, color: C.textMuted }}>{t(lang, "p_ad_admin_referral_desc")}</p>
                 </div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                   <div style={{ padding: "10px 16px", background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: "monospace", fontSize: 12, color: C.gold, wordBreak: "break-all" }}>
@@ -4160,32 +4226,32 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                   </div>
                   <button style={btn("gold")} onClick={() => {
                     const base = window.location.origin.replace("/platform","");
-                    navigator.clipboard.writeText(`${base}?ref=${user.nickname}`).then(() => setMsg("✓ Link copiato!"));
-                  }}>Copia</button>
+                    navigator.clipboard.writeText(`${base}?ref=${user.nickname}`).then(() => setMsg(t(lang, "p_cd_link_copied")));
+                  }}>{t(lang, "p_ad_copy")}</button>
                 </div>
               </div>
             </div>
 
             <div style={grid(4)}>
-              <div style={card}><div style={label}>Utenti Totali</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.gold }}>{allUsers.length}</div>
-                <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{allUsers.filter((u:any)=>u.role==='owner').length} owner · {allUsers.filter((u:any)=>u.role==='concierge').length} concierge · {allUsers.filter((u:any)=>u.role==='agent').length} agenti</div>
+              <div style={card}><div style={label}>{t(lang, "p_ad_total_users_label")}</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.gold }}>{allUsers.length}</div>
+                <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{t(lang, "p_ad_users_breakdown", { owners: allUsers.filter((u:any)=>u.role==='owner').length, concierges: allUsers.filter((u:any)=>u.role==='concierge').length, agents: allUsers.filter((u:any)=>u.role==='agent').length })}</div>
               </div>
-              <div style={card}><div style={label}>Proprietà</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.goldLight }}>{(data.properties || []).length}</div>
-                <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{(data.properties||[]).filter((p:any)=>p.is_public!==0).length} in vetrina</div>
+              <div style={card}><div style={label}>{t(lang, "p_svc_properties")}</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.goldLight }}>{(data.properties || []).length}</div>
+                <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{t(lang, "p_ad_in_showcase_count", { n: (data.properties||[]).filter((p:any)=>p.is_public!==0).length })}</div>
               </div>
-              <div style={card}><div style={label}>Prenotazioni</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.text }}>{totalBookings}</div><div style={{ fontSize: 10, color: C.success, marginTop: 4 }}>{confirmedBookings} confermate</div></div>
+              <div style={card}><div style={label}>{t(lang, "p_ad_bookings_label")}</div><div style={{ fontFamily: FONT, fontSize: 32, color: C.text }}>{totalBookings}</div><div style={{ fontSize: 10, color: C.success, marginTop: 4 }}>{t(lang, "p_ad_confirmed_count", { n: confirmedBookings })}</div></div>
               <div style={card}>
-                <div style={label}>Fatturato Confermato</div>
+                <div style={label}>{t(lang, "p_ad_confirmed_revenue")}</div>
                 <div style={{ fontFamily: FONT, fontSize: 24, color: C.success }}>€{totalRevenue.toFixed(0)}</div>
                 {(() => {
                   const confirmed = (data.bookings||[]).filter((b:any)=>["confirmed_owner","evaso"].includes(b.status));
                   const platFees = confirmed.reduce((s:number,b:any)=>s+(b.platform_fee||0),0);
-                  return platFees > 0 ? <div style={{ fontSize: 10, color: C.gold, marginTop: 4 }}>di cui €{platFees.toFixed(0)} commissioni piattaforma</div> : null;
+                  return platFees > 0 ? <div style={{ fontSize: 10, color: C.gold, marginTop: 4 }}>{t(lang, "p_ad_of_which_platform_fees", { amount: platFees.toFixed(0) })}</div> : null;
                 })()}
               </div>
             </div>
             <div style={card}>
-              <h3 style={h3Style}>Distribuzione Asset</h3>
+              <h3 style={h3Style}>{t(lang, "p_ad_asset_distribution")}</h3>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                 {ASSET_TYPES.map(at => {
                   const count = (data.properties || []).filter((p: any) => (p.asset_type || 'apartment') === at.v).length;
@@ -4200,9 +4266,9 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
               </div>
             </div>
             <div style={card}>
-              <h3 style={h3Style}>Ultime Prenotazioni</h3>
+              <h3 style={h3Style}>{t(lang, "p_ad_latest_bookings")}</h3>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                <thead><tr>{["Cliente","Concierge","Proprietà","Date","Totale","Status"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                <thead><tr>{[t(lang, "p_common_client"), t(lang, "p_role_concierge"), t(lang, "p_ad_th_property"), t(lang, "p_th_dates"), t(lang, "p_common_total"), t(lang, "p_common_status")].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
                 <tbody>{(data.bookings || []).slice(0, 10).map((b: any) => {
                   const conc = allUsers.find((u: any) => u.id === b.concierge_id);
                   const room = (data.rooms || []).find((r: any) => r.id === b.room_id);

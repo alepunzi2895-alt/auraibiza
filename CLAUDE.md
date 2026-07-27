@@ -15,7 +15,7 @@ npm run lint     # linting TypeScript/ESLint
 File `.env.local` (escluso da git — aggiungere anche su Vercel dashboard):
 
 ```
-TURSO_DATABASE_URL=libsql://conciergebookings-therealmfkk.aws-eu-west-1.turso.io
+TURSO_DATABASE_URL=libsql://auraibiza-therealmfkk.aws-eu-west-1.turso.io
 TURSO_AUTH_TOKEN=<token jwt>
 ```
 
@@ -150,10 +150,11 @@ Storiate come array JSON di stringhe base64 in Turso (sia properties che rooms).
 
 ## Account default (seed)
 
-| Nickname    | Ruolo  | Password    |
-|-------------|--------|-------------|
-| alessandro  | admin  | Gianni95.   |
-| silvia      | owner  | password123 |
+| Nickname    | Ruolo  |
+|-------------|--------|
+| alessandro  | admin  |
+
+Password non riportata in chiaro nella documentazione.
 
 ## Pattern da seguire
 

@@ -21,7 +21,7 @@ async function main() {
     args: [propId, ownerId, 'Appartamento Santa Eulària', "Santa Eulària des Riu, Ibiza", "⚠️ PREZZO PROVVISORIO e proprietario da assegnare - nessun documento prezzi trovato nella cartella Drive. Da rivedere."],
   });
   const roomId = `r${uid()}`;
-  await db.execute({ sql: "INSERT INTO rooms (id, property_id, name, capacity, description) VALUES (?, ?, 'Appartamento Santa Eulària', 4, '')", args: [roomId, propId] });
+  await db.execute({ sql: "INSERT INTO rooms (id, property_id, name, capacity, description) VALUES (?, ?, 'Appartamento Santa Eulària', 2, '')", args: [roomId, propId] });
   const now = new Date();
   for (let i = 0; i < 12; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);

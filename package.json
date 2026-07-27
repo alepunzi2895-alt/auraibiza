@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@libsql/client": "^0.17.2",
     "leaflet": "^1.9.4",
     "next": "^14.2.0",
