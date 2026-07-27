@@ -119,9 +119,13 @@ export async function initDatabase() {
       "ALTER TABLE properties ADD COLUMN description_i18n TEXT",
       "ALTER TABLE properties ADD COLUMN thumbnail TEXT",
     ];
-    for (const sql of migrations) {
-      try { await db.execute(sql); } catch (_e) {}
-    }
+    // `dbReady` è un flag in memoria: si azzera ad ogni cold start serverless,
+    // quindi queste migrazioni (quasi sempre no-op, la colonna esiste già) si
+    // rieseguono ad ogni istanza fredda. In sequenza erano ~45 round-trip di
+    // rete uno alla volta verso Turso — da soli potevano costare 20-45s prima
+    // ancora di iniziare la query vera. In parallelo il costo è quello del
+    // round-trip più lento, non la somma di tutti.
+    await Promise.allSettled(migrations.map(sql => db.execute(sql)));
 
     // Senza questi indici, un filtro su properties.asset_type forza una scansione
     // completa che tocca anche le colonne image/cover_image (base64, multi-MB per
@@ -130,9 +134,7 @@ export async function initDatabase() {
       "CREATE INDEX IF NOT EXISTS idx_properties_asset_type_id ON properties(asset_type, id)",
       "CREATE INDEX IF NOT EXISTS idx_rooms_property_id ON rooms(property_id)",
     ];
-    for (const sql of indexes) {
-      try { await db.execute(sql); } catch (_e) {}
-    }
+    await Promise.allSettled(indexes.map(sql => db.execute(sql)));
 
     const userCountRes = await db.execute("SELECT COUNT(*) as count FROM users");
     const count = (userCountRes.rows[0] as any).count;

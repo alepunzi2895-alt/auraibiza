@@ -501,7 +501,12 @@ export default function LandingPage() {
         .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
         .card-hover:hover { transform: translateY(-4px); box-shadow: 0 16px 48px rgba(0,0,0,0.5) !important; }
         input:focus, textarea:focus, select:focus { border-color: ${C.gold}55 !important; outline: none !important; }
-        @media (max-width: 768px) { .grid-3 { grid-template-columns: 1fr !important; } .hero-title { font-size: 42px !important; } .hide-mobile { display: none !important; } }
+        @media (max-width: 768px) {
+          .grid-3 { grid-template-columns: 1fr !important; }
+          .hero-title { font-size: 42px !important; }
+          .hide-mobile { display: none !important; }
+          .hero-bg { background-position: center, center, center, center, center, 82% 32% !important; }
+        }
       ` }} />
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
@@ -574,7 +579,7 @@ export default function LandingPage() {
       )}
 
       {/* ── HERO ───────────────────────────────────────────────────────────── */}
-      <section style={{
+      <section className="hero-bg" style={{
         minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
         textAlign: "center", padding: `${listings.referralValid ? 158 : 120}px 24px 80px`,
         backgroundImage: `
