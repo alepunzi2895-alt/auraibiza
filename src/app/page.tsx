@@ -522,14 +522,17 @@ export default function LandingPage() {
       <section style={{
         minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
         textAlign: "center", padding: `${listings.referralValid ? 158 : 120}px 24px 80px`,
-        background: `
-          radial-gradient(ellipse 120% 55% at 50% -5%, rgba(5,18,48,0.95) 0%, transparent 65%),
-          radial-gradient(ellipse 70% 50% at 88% 100%, rgba(160,90,10,0.55) 0%, transparent 55%),
-          radial-gradient(ellipse 55% 40% at 12% 85%, rgba(6,22,55,0.6) 0%, transparent 50%),
-          radial-gradient(ellipse 50% 35% at 50% 100%, rgba(120,65,8,0.45) 0%, transparent 55%),
-          radial-gradient(ellipse 80% 60% at 50% 50%, rgba(12,8,4,0.3) 0%, transparent 80%),
-          linear-gradient(165deg, #03060C 0%, #05091A 35%, #040608 70%, #060408 100%)
+        backgroundImage: `
+          radial-gradient(ellipse 120% 55% at 50% -5%, rgba(5,18,48,0.85) 0%, transparent 65%),
+          radial-gradient(ellipse 70% 50% at 88% 100%, rgba(160,90,10,0.32) 0%, transparent 55%),
+          radial-gradient(ellipse 55% 40% at 12% 85%, rgba(6,22,55,0.4) 0%, transparent 50%),
+          radial-gradient(ellipse 50% 35% at 50% 100%, rgba(120,65,8,0.28) 0%, transparent 55%),
+          linear-gradient(180deg, rgba(3,5,10,0.6) 0%, rgba(3,5,10,0.74) 45%, rgba(3,5,10,0.66) 75%, rgba(3,5,10,0.85) 100%),
+          url("/hero-ibiza.jpg")
         `,
+        backgroundSize: "auto, auto, auto, auto, auto, cover",
+        backgroundPosition: "center, center, center, center, center, center 32%",
+        backgroundRepeat: "no-repeat",
         position: "relative", overflow: "hidden",
       }}>
         {/* stelle decorative */}
