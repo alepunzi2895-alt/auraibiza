@@ -369,6 +369,22 @@ const en: Dict = {
   p_od_room_added: "Room added", p_od_room_updated: "Room updated",
   p_od_collaborator_added: "Collaborator added", p_od_collaborator_removed: "Collaborator removed",
   p_od_pricing_updated: "Prices updated", p_od_new_month_added: "New month added to the price list",
+
+  // --- PUBLIC BOOKING ASSISTANT ---
+  assistant_fab_label: "Ask our assistant",
+  assistant_greeting: "Hi, I'm your Aura Ibiza assistant. How can I help you?",
+  assistant_suggestion_1: "Apartment for 4 people in August",
+  assistant_suggestion_2: "Boats available this weekend",
+  assistant_suggestion_3: "Villas with private pool",
+  assistant_suggestion_4: "Car rental for 3 days",
+  assistant_placeholder: "Type your request...",
+  assistant_send: "Send",
+  assistant_thinking: "Searching...",
+  assistant_no_results: "No results found with these criteria.",
+  assistant_results_heading: "Matching options",
+  assistant_view_details: "View details",
+  assistant_error: "Something went wrong. Please try again.",
+  assistant_close: "Close",
 };
 
 const it: Dict = {
@@ -725,6 +741,22 @@ const it: Dict = {
   p_od_room_added: "Stanza aggiunta", p_od_room_updated: "Stanza aggiornata",
   p_od_collaborator_added: "Collaboratore aggiunto", p_od_collaborator_removed: "Collaboratore rimosso",
   p_od_pricing_updated: "Prezzi aggiornati", p_od_new_month_added: "Nuovo mese aggiunto al listino",
+
+  // --- ASSISTENTE PRENOTAZIONI (vetrina pubblica) ---
+  assistant_fab_label: "Chiedi al nostro assistente",
+  assistant_greeting: "Ciao, sono il tuo assistente Aura Ibiza. Come posso aiutarti?",
+  assistant_suggestion_1: "Appartamento per 4 persone ad agosto",
+  assistant_suggestion_2: "Barche disponibili questo weekend",
+  assistant_suggestion_3: "Ville con piscina privata",
+  assistant_suggestion_4: "Auto a noleggio per 3 giorni",
+  assistant_placeholder: "Scrivi qui la tua richiesta...",
+  assistant_send: "Invia",
+  assistant_thinking: "Sto cercando...",
+  assistant_no_results: "Nessun risultato trovato con questi criteri.",
+  assistant_results_heading: "Opzioni disponibili",
+  assistant_view_details: "Vedi dettagli",
+  assistant_error: "Qualcosa è andato storto. Riprova.",
+  assistant_close: "Chiudi",
 };
 
 const es: Dict = {
@@ -1081,6 +1113,22 @@ const es: Dict = {
   p_od_room_added: "Habitación añadida", p_od_room_updated: "Habitación actualizada",
   p_od_collaborator_added: "Colaborador añadido", p_od_collaborator_removed: "Colaborador eliminado",
   p_od_pricing_updated: "Precios actualizados", p_od_new_month_added: "Nuevo mes añadido a la tarifa",
+
+  // --- ASISTENTE DE RESERVAS (vitrina pública) ---
+  assistant_fab_label: "Pregunta a nuestro asistente",
+  assistant_greeting: "Hola, soy tu asistente de Aura Ibiza. ¿Cómo puedo ayudarte?",
+  assistant_suggestion_1: "Apartamento para 4 personas en agosto",
+  assistant_suggestion_2: "Barcos disponibles este fin de semana",
+  assistant_suggestion_3: "Villas con piscina privada",
+  assistant_suggestion_4: "Alquiler de coche por 3 días",
+  assistant_placeholder: "Escribe tu solicitud...",
+  assistant_send: "Enviar",
+  assistant_thinking: "Buscando...",
+  assistant_no_results: "No se encontraron resultados con estos criterios.",
+  assistant_results_heading: "Opciones disponibles",
+  assistant_view_details: "Ver detalles",
+  assistant_error: "Algo salió mal. Inténtalo de nuevo.",
+  assistant_close: "Cerrar",
 };
 
 const de: Dict = {
@@ -1437,6 +1485,22 @@ const de: Dict = {
   p_od_room_added: "Zimmer hinzugefügt", p_od_room_updated: "Zimmer aktualisiert",
   p_od_collaborator_added: "Partner hinzugefügt", p_od_collaborator_removed: "Partner entfernt",
   p_od_pricing_updated: "Preise aktualisiert", p_od_new_month_added: "Neuer Monat zur Preisliste hinzugefügt",
+
+  // --- BUCHUNGSASSISTENT (öffentliche Vitrine) ---
+  assistant_fab_label: "Fragen Sie unseren Assistenten",
+  assistant_greeting: "Hallo! Ich bin Ihr Aura Ibiza Assistent. Wie kann ich Ihnen helfen?",
+  assistant_suggestion_1: "Apartment für 4 Personen im August",
+  assistant_suggestion_2: "Verfügbare Boote an diesem Wochenende",
+  assistant_suggestion_3: "Villen mit privatem Pool",
+  assistant_suggestion_4: "Autovermietung für 3 Tage",
+  assistant_placeholder: "Schreiben Sie Ihre Anfrage...",
+  assistant_send: "Senden",
+  assistant_thinking: "Suche läuft...",
+  assistant_no_results: "Keine Ergebnisse mit diesen Kriterien gefunden.",
+  assistant_results_heading: "Verfügbare Optionen",
+  assistant_view_details: "Details ansehen",
+  assistant_error: "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
+  assistant_close: "Schließen",
 };
 
 const fr: Dict = {
@@ -1793,6 +1857,22 @@ const fr: Dict = {
   p_od_room_added: "Chambre ajoutée", p_od_room_updated: "Chambre mise à jour",
   p_od_collaborator_added: "Collaborateur ajouté", p_od_collaborator_removed: "Collaborateur retiré",
   p_od_pricing_updated: "Tarifs mis à jour", p_od_new_month_added: "Nouveau mois ajouté au tarif",
+
+  // --- ASSISTANT DE RÉSERVATION (vitrine publique) ---
+  assistant_fab_label: "Demandez à notre assistant",
+  assistant_greeting: "Bonjour, je suis votre assistant Aura Ibiza. Comment puis-je vous aider ?",
+  assistant_suggestion_1: "Appartement pour 4 personnes en août",
+  assistant_suggestion_2: "Bateaux disponibles ce week-end",
+  assistant_suggestion_3: "Villas avec piscine privée",
+  assistant_suggestion_4: "Location de voiture pour 3 jours",
+  assistant_placeholder: "Écrivez votre demande...",
+  assistant_send: "Envoyer",
+  assistant_thinking: "Recherche en cours...",
+  assistant_no_results: "Aucun résultat trouvé avec ces critères.",
+  assistant_results_heading: "Options disponibles",
+  assistant_view_details: "Voir les détails",
+  assistant_error: "Une erreur s'est produite. Veuillez réessayer.",
+  assistant_close: "Fermer",
 };
 
 const DICTS: Record<Lang, Dict> = { en, it, es, de, fr };

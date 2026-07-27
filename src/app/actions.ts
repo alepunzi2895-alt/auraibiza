@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath, unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
+import Anthropic from "@anthropic-ai/sdk";
 
 // --- HELPERS ---
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -105,6 +106,17 @@ export async function initDatabase() {
       "ALTER TABLE properties ADD COLUMN description_i18n TEXT",
     ];
     for (const sql of migrations) {
+      try { await db.execute(sql); } catch (_e) {}
+    }
+
+    // Senza questi indici, un filtro su properties.asset_type forza una scansione
+    // completa che tocca anche le colonne image/cover_image (base64, multi-MB per
+    // riga): una query altrimenti banale può richiedere 20-30s invece di ~100ms.
+    const indexes = [
+      "CREATE INDEX IF NOT EXISTS idx_properties_asset_type_id ON properties(asset_type, id)",
+      "CREATE INDEX IF NOT EXISTS idx_rooms_property_id ON rooms(property_id)",
+    ];
+    for (const sql of indexes) {
       try { await db.execute(sql); } catch (_e) {}
     }
 
@@ -1139,4 +1151,201 @@ export async function updateBookingPlatformFee(bookingId: string, platformFee: n
     revalidatePath("/platform");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
+}
+
+// --- PUBLIC BOOKING ASSISTANT ---
+// Ricerca reale su disponibilità/prezzi (mai inventata dal modello): usata sia
+// direttamente sia come tool eseguito da chatBookingAssistant.
+const ASSISTANT_CATEGORY_TYPES: Record<string, string[]> = {
+  residenze: ["apartment", "villa"],
+  marine: ["boat"],
+  mobilita: ["car", "scooter"],
+};
+
+export async function searchAvailability(filters: {
+  checkIn?: string; checkOut?: string; guests?: number; category?: string; query?: string;
+}) {
+  try {
+    await initDatabase();
+    const types = filters.category && filters.category !== "all" ? ASSISTANT_CATEGORY_TYPES[filters.category] : null;
+
+    let sql = `
+      SELECT p.id as property_id, p.name as property_name, p.location, p.asset_type,
+             r.id as room_id, r.name as room_name, r.capacity, r.bedrooms, r.bathrooms
+      FROM properties p
+      JOIN rooms r ON r.property_id = p.id
+      WHERE (p.is_public = 1 OR p.is_public IS NULL)
+    `;
+    const args: any[] = [];
+    if (types) {
+      sql += ` AND p.asset_type IN (${types.map(() => "?").join(",")})`;
+      args.push(...types);
+    }
+    if (filters.guests) {
+      sql += ` AND r.capacity >= ?`;
+      args.push(filters.guests);
+    }
+    if (filters.query && filters.query.trim()) {
+      const q = `%${filters.query.trim()}%`;
+      sql += ` AND (p.name LIKE ? OR p.location LIKE ?)`;
+      args.push(q, q);
+    }
+    sql += ` LIMIT 40`;
+
+    const candidates = await db.execute({ sql, args });
+    let rows = candidates.rows as any[];
+    if (rows.length === 0) return { results: [], totalMatches: 0 };
+
+    if (filters.checkIn && filters.checkOut) {
+      const roomIds = rows.map(r => r.room_id);
+      const placeholders = roomIds.map(() => "?").join(",");
+
+      const blocked = await db.execute({
+        sql: `SELECT DISTINCT room_id FROM availability WHERE room_id IN (${placeholders}) AND date >= ? AND date < ? AND status = 'blocked'`,
+        args: [...roomIds, filters.checkIn, filters.checkOut],
+      });
+      const blockedSet = new Set((blocked.rows as any[]).map(r => r.room_id));
+
+      const overlapping = await db.execute({
+        sql: `SELECT DISTINCT room_id FROM bookings WHERE room_id IN (${placeholders}) AND status IN ('confirmed_owner','evaso','payment_submitted') AND NOT (end_date <= ? OR start_date >= ?)`,
+        args: [...roomIds, filters.checkIn, filters.checkOut],
+      });
+      const overlapSet = new Set((overlapping.rows as any[]).map(r => r.room_id));
+
+      rows = rows.filter(r => !blockedSet.has(r.room_id) && !overlapSet.has(r.room_id));
+    }
+
+    if (rows.length === 0) return { results: [], totalMatches: 0 };
+
+    const remainingRoomIds = rows.map(r => r.room_id);
+    const phPricing = remainingRoomIds.map(() => "?").join(",");
+    const pricingRows = await db.execute({
+      sql: `SELECT room_id, month, base_price, cleaning_fee FROM pricing WHERE room_id IN (${phPricing})`,
+      args: remainingRoomIds,
+    });
+    const pricingByRoom: Record<string, { month: string; base_price: number; cleaning_fee: number }[]> = {};
+    for (const p of pricingRows.rows as any[]) {
+      (pricingByRoom[p.room_id] ||= []).push(p);
+    }
+
+    const results = rows.slice(0, 8).map(r => {
+      const prices = pricingByRoom[r.room_id] || [];
+      let nights: number | null = null;
+      let totalStay: number | null = null;
+      let cleaningFee: number | null = null;
+      let pricePerNight: number | null = null;
+
+      if (filters.checkIn && filters.checkOut && prices.length > 0) {
+        const [sy, sm, sd] = filters.checkIn.split("-").map(Number);
+        const [ey, em, ed] = filters.checkOut.split("-").map(Number);
+        const start = Date.UTC(sy, sm - 1, sd);
+        const end = Date.UTC(ey, em - 1, ed);
+        nights = Math.round((end - start) / 86400000);
+        let sum = 0;
+        for (let t = start; t < end; t += 86400000) {
+          const d = new Date(t);
+          const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+          const match = prices.find(p => p.month === month);
+          sum += match ? match.base_price : prices[0].base_price;
+        }
+        totalStay = Math.round(sum);
+        cleaningFee = prices[0].cleaning_fee || 0;
+        pricePerNight = nights ? Math.round(sum / nights) : null;
+      } else if (prices.length > 0) {
+        pricePerNight = Math.min(...prices.map(p => p.base_price));
+      }
+
+      return {
+        propertyId: r.property_id,
+        propertyName: r.property_name,
+        location: r.location,
+        assetType: r.asset_type,
+        roomId: r.room_id,
+        roomName: r.room_name,
+        capacity: r.capacity,
+        pricePerNight,
+        nights,
+        totalStay,
+        cleaningFee,
+        totalWithCleaning: totalStay !== null && cleaningFee !== null ? Math.round(totalStay + cleaningFee) : null,
+        checkIn: filters.checkIn || null,
+        checkOut: filters.checkOut || null,
+      };
+    });
+
+    return { results, totalMatches: rows.length };
+  } catch (error) {
+    return { results: [], totalMatches: 0, error: String(error) };
+  }
+}
+
+const ASSISTANT_TOOL: Anthropic.Tool = {
+  name: "search_availability",
+  description:
+    "Cerca alloggi/mezzi REALMENTE disponibili sulla piattaforma Aura Ibiza (Ibiza), in base a date, numero di ospiti, categoria e testo libero. Usa SEMPRE questo strumento prima di affermare che qualcosa è disponibile o di indicare un prezzo — non inventare mai disponibilità, prezzi o nomi di proprietà. Se l'utente non specifica le date, chiama comunque lo strumento omettendo checkIn/checkOut per vedere cosa esiste in generale.",
+  input_schema: {
+    type: "object",
+    properties: {
+      checkIn: { type: "string", description: "Data di check-in in formato YYYY-MM-DD. Ometti se non specificata." },
+      checkOut: { type: "string", description: "Data di check-out in formato YYYY-MM-DD. Ometti se non specificata." },
+      guests: { type: "integer", description: "Numero di ospiti/persone richiesto." },
+      category: { type: "string", enum: ["residenze", "marine", "mobilita", "all"], description: "residenze = appartamenti/ville, marine = barche, mobilita = auto/scooter, all = tutte le categorie." },
+      query: { type: "string", description: "OMETTI questo campo a meno che l'utente non abbia nominato ESPLICITAMENTE un luogo o una proprietà specifica (es. 'Santa Eularia', 'Ibiza Town', 'Chill Out'). È una ricerca per sottostringa esatta su nome/località: una singola parola generica come 'appartamento' o una frase inventata dal modello NON deve mai essere usata qui, altrimenti azzera risultati altrimenti validi. Guests/category/date bastano da soli per la maggior parte delle richieste." },
+    },
+  },
+};
+
+export async function chatBookingAssistant(
+  history: { role: "user" | "assistant"; text: string }[],
+  lang: string
+) {
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return { success: false, text: "", matches: [] as any[], error: "ANTHROPIC_API_KEY non configurata." };
+    }
+    const client = new Anthropic();
+    const today = new Date().toISOString().slice(0, 10);
+
+    const systemPrompt = `Sei l'assistente di ricerca di Aura Ibiza, piattaforma di prenotazione di ville, appartamenti, barche, auto e scooter a Ibiza.
+Oggi è ${today}. Rispondi SEMPRE nella lingua con codice "${lang}" (en/it/es/de/fr).
+Usa SEMPRE lo strumento search_availability per verificare disponibilità e prezzi reali prima di rispondere — non inventare mai numeri, nomi o disponibilità.
+Se una prima ricerca restituisce zero risultati e avevi usato il campo "query", riprova SUBITO una seconda volta omettendo "query" prima di concludere che non c'è disponibilità: un testo di ricerca troppo specifico può azzerare risultati validi.
+Se dopo aver riprovato non ci sono comunque risultati, dillo chiaramente e suggerisci di allargare i criteri (date, categoria, ospiti).
+Sii breve e cordiale. Non elencare tu stesso i dettagli di ogni struttura trovata (l'interfaccia mostra già delle schede con foto e prezzo per ogni risultato) — limitati a un breve commento e a invitare l'utente a scegliere un'opzione qui sotto per procedere con la richiesta di prenotazione.`;
+
+    const messages: Anthropic.MessageParam[] = history.map(h => ({ role: h.role, content: h.text }));
+
+    let matches: any[] = [];
+    let finalText = "";
+
+    for (let turn = 0; turn < 4; turn++) {
+      const response = await client.messages.create({
+        model: "claude-opus-4-8",
+        max_tokens: 1024,
+        system: systemPrompt,
+        tools: [ASSISTANT_TOOL],
+        messages,
+      });
+
+      const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+      const textBlocks = response.content.filter((b): b is Anthropic.TextBlock => b.type === "text");
+      if (textBlocks.length > 0) finalText = textBlocks.map(b => b.text).join("\n");
+
+      if (toolUses.length === 0 || response.stop_reason !== "tool_use") break;
+
+      messages.push({ role: "assistant", content: response.content });
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      for (const tu of toolUses) {
+        const result = await searchAvailability(tu.input as any);
+        if (result.results) matches = result.results;
+        toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result) });
+      }
+      messages.push({ role: "user", content: toolResults });
+    }
+
+    return { success: true, text: finalText, matches };
+  } catch (error) {
+    return { success: false, text: "", matches: [] as any[], error: String(error) };
+  }
 }

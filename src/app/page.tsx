@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, CSSProperties } from "react";
 import "leaflet/dist/leaflet.css";
-import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf, getPropertyGallery } from "./actions";
+import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf, getPropertyGallery, chatBookingAssistant } from "./actions";
 import { LANGUAGES, Lang, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, assetTypeLabel, localizedDescription } from "@/lib/i18n";
 
 // ─── Design tokens (standalone, no import from platform) ─────────────────────
@@ -335,6 +335,38 @@ export default function LandingPage() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [formErr, setFormErr] = useState("");
+
+  // Booking assistant (chat) state
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantMessages, setAssistantMessages] = useState<{ role: "user" | "assistant"; text: string; matches?: any[] }[]>([]);
+  const [assistantInput, setAssistantInput] = useState("");
+  const [assistantLoading, setAssistantLoading] = useState(false);
+
+  const handleAssistantSend = async (textOverride?: string) => {
+    const text = (textOverride ?? assistantInput).trim();
+    if (!text || assistantLoading) return;
+    const nextMessages = [...assistantMessages, { role: "user" as const, text }];
+    setAssistantMessages(nextMessages);
+    setAssistantInput("");
+    setAssistantLoading(true);
+    const res = await chatBookingAssistant(nextMessages.map(m => ({ role: m.role, text: m.text })), lang);
+    setAssistantLoading(false);
+    setAssistantMessages(prev => [...prev, {
+      role: "assistant",
+      text: res.success && res.text ? res.text : t(lang, "assistant_error"),
+      matches: res.matches || [],
+    }]);
+  };
+
+  const handleAssistantBook = (match: any) => {
+    const property = listings.properties.find((p: any) => p.id === match.propertyId);
+    const room = listings.rooms.find((r: any) => r.id === match.roomId);
+    if (!property || !room) return;
+    setAssistantOpen(false);
+    setDetailModal(property);
+    setDetailRoom(room);
+    setDetailRange({ start: match.checkIn || null, end: match.checkOut || null });
+  };
 
   // Step 1: capture referral code from URL/sessionStorage
   useEffect(() => {
@@ -1205,6 +1237,107 @@ export default function LandingPage() {
                 <button style={{ ...btn("gold"), padding: "12px 36px" }} onClick={() => setModal(null)}>{t(lang, "req_close")}</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* --- Booking Assistant (chat) --- */}
+      <div
+        onClick={() => setAssistantOpen(o => !o)}
+        style={{
+          position: "fixed", bottom: 25, right: 25, width: 60, height: 60,
+          background: `linear-gradient(135deg, ${C.goldDark}, ${C.gold})`,
+          borderRadius: "50%", cursor: "pointer", display: "flex", justifyContent: "center",
+          alignItems: "center", boxShadow: "0 10px 30px rgba(0,0,0,0.4)", zIndex: 1000,
+        }}
+        title={t(lang, "assistant_fab_label")}
+      >
+        <span style={{ fontSize: 26 }}>{assistantOpen ? "✕" : "💬"}</span>
+      </div>
+
+      {assistantOpen && (
+        <div style={{
+          position: "fixed", bottom: 95, right: 25, width: 340, maxWidth: "calc(100vw - 32px)",
+          height: 480, maxHeight: "calc(100vh - 140px)", background: C.surface,
+          border: `1px solid ${C.borderGold}`, borderRadius: 14, boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+          zIndex: 999, display: "flex", flexDirection: "column", overflow: "hidden",
+        }}>
+          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 20 }}>💬</span>
+            <span style={{ fontFamily: FONT, fontSize: 16, color: C.goldLight }}>{t(lang, "assistant_fab_label")}</span>
+          </div>
+
+          <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+            {assistantMessages.length === 0 && (
+              <div>
+                <div style={{ background: C.surfaceAlt, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, lineHeight: 1.5, alignSelf: "flex-start", maxWidth: "90%" }}>
+                  {t(lang, "assistant_greeting")}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                  {["assistant_suggestion_1", "assistant_suggestion_2", "assistant_suggestion_3", "assistant_suggestion_4"].map(key => (
+                    <button
+                      key={key}
+                      style={{ ...btn("outline"), textAlign: "left", fontSize: 11, padding: "8px 12px", textTransform: "none", letterSpacing: 0, fontWeight: 400 }}
+                      onClick={() => handleAssistantSend(t(lang, key))}
+                    >
+                      {t(lang, key)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {assistantMessages.map((m, i) => (
+              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
+                <div style={{
+                  background: m.role === "user" ? C.goldGlow : C.surfaceAlt,
+                  border: m.role === "user" ? `1px solid ${C.borderGold}` : "none",
+                  borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, lineHeight: 1.5, maxWidth: "90%", whiteSpace: "pre-wrap",
+                }}>
+                  {m.text}
+                </div>
+                {m.role === "assistant" && m.matches && m.matches.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8, width: "100%" }}>
+                    <div style={{ fontSize: 10, color: C.textDim, textTransform: "uppercase", letterSpacing: "1px" }}>{t(lang, "assistant_results_heading")}</div>
+                    {m.matches.map((match: any, mi: number) => (
+                      <div key={mi} style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10 }}>
+                        <div style={{ fontSize: 13, color: C.goldLight, fontFamily: FONT }}>{match.propertyName}{match.roomName ? ` — ${match.roomName}` : ""}</div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{match.location}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                          <span style={{ fontSize: 12, color: C.text }}>
+                            {match.pricePerNight != null ? `${t(lang, "from_price")} €${match.pricePerNight}${unitSuffix(lang, match.assetType)}` : ""}
+                          </span>
+                          <button style={{ ...btn("gold"), padding: "6px 14px", fontSize: 10 }} onClick={() => handleAssistantBook(match)}>
+                            {t(lang, "assistant_view_details")}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {m.role === "assistant" && m.matches && m.matches.length === 0 && (
+                  <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{t(lang, "assistant_no_results")}</div>
+                )}
+              </div>
+            ))}
+
+            {assistantLoading && (
+              <div style={{ fontSize: 12, color: C.textDim, fontStyle: "italic" }}>{t(lang, "assistant_thinking")}</div>
+            )}
+          </div>
+
+          <div style={{ padding: 12, borderTop: `1px solid ${C.border}`, display: "flex", gap: 8 }}>
+            <input
+              style={{ ...inputStyle, flex: 1 }}
+              value={assistantInput}
+              onChange={e => setAssistantInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleAssistantSend(); }}
+              placeholder={t(lang, "assistant_placeholder")}
+              disabled={assistantLoading}
+            />
+            <button style={{ ...btn("gold"), padding: "10px 16px" }} onClick={() => handleAssistantSend()} disabled={assistantLoading}>
+              {t(lang, "assistant_send")}
+            </button>
           </div>
         </div>
       )}
