@@ -3137,7 +3137,9 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
           <div style={{ ...card, width: 360 }} onClick={e => e.stopPropagation()}>
             <h3 style={h3Style}>{t(lang, "p_od_price_month")} {editPricing.month}</h3>
             <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_base_label")}{unitSuffix(lang, data.properties.find((p: any) => p.id === allRooms.find((r: any) => r.id === editPricing.roomId)?.property_id)?.asset_type)} (€)</label><input style={input} type="number" value={editPricing.basePrice} onChange={e => setEditPricing({ ...editPricing, basePrice: e.target.value })} /></div>
-            <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_cleaning_label")}</label><input style={input} type="number" value={editPricing.cleaningFee} onChange={e => setEditPricing({ ...editPricing, cleaningFee: e.target.value })} /></div>
+            {!isVehicleAsset(data.properties.find((p: any) => p.id === allRooms.find((r: any) => r.id === editPricing.roomId)?.property_id)?.asset_type) && (
+              <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_cleaning_label")}</label><input style={input} type="number" value={editPricing.cleaningFee} onChange={e => setEditPricing({ ...editPricing, cleaningFee: e.target.value })} /></div>
+            )}
             <div style={{ display: "flex", gap: 8 }}>
               <button style={{ ...btn("gold"), flex: 1 }} onClick={handleSavePricing}>{t(lang, "p_common_save")}</button>
               <button style={{ ...btn(), flex: 1 }} onClick={() => setEditPricing(null)}>{t(lang, "p_common_cancel")}</button>
@@ -3175,7 +3177,9 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
             <h3 style={h3Style}>{t(lang, "p_od_add_month_to_list")}</h3>
             <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_month_label")}</label><input style={input} type="month" value={addPricing.month} onChange={e => setAddPricing({ ...addPricing, month: e.target.value })} /></div>
             <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_base_label")}{unitSuffix(lang, data.properties.find((p: any) => p.id === allRooms.find((r: any) => r.id === addPricing.roomId)?.property_id)?.asset_type)} (€)</label><input style={input} type="number" value={addPricing.basePrice} onChange={e => setAddPricing({ ...addPricing, basePrice: e.target.value })} /></div>
-            <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_cleaning_label")}</label><input style={input} type="number" value={addPricing.cleaningFee} onChange={e => setAddPricing({ ...addPricing, cleaningFee: e.target.value })} /></div>
+            {!isVehicleAsset(data.properties.find((p: any) => p.id === allRooms.find((r: any) => r.id === addPricing.roomId)?.property_id)?.asset_type) && (
+              <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_cleaning_label")}</label><input style={input} type="number" value={addPricing.cleaningFee} onChange={e => setAddPricing({ ...addPricing, cleaningFee: e.target.value })} /></div>
+            )}
             <div style={{ display: "flex", gap: 8 }}>
               <button style={{ ...btn("gold"), flex: 1 }} onClick={handleAddPricingMonth}>{t(lang, "p_common_add")}</button>
               <button style={{ ...btn(), flex: 1 }} onClick={() => setAddPricing(null)}>{t(lang, "p_common_cancel")}</button>
@@ -3479,7 +3483,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
   const [assetSearch, setAssetSearch] = useState("");
   const [editAsset, setEditAsset] = useState<{ id: string; name: string; location: string; description: string; asset_type: string } | null>(null);
   const [editAssetRoom, setEditAssetRoom] = useState<{ id: string; name: string; capacity: string; description: string; bedrooms: string; bathrooms: string; assetType: string; carFields: CarFieldsValue } | null>(null);
-  const [editAssetPricing, setEditAssetPricing] = useState<{ roomId: string; month: string; basePrice: string; cleaningFee: string } | null>(null);
+  const [editAssetPricing, setEditAssetPricing] = useState<{ roomId: string; month: string; basePrice: string; cleaningFee: string; assetType: string } | null>(null);
   const allProperties: any[] = data.properties || [];
   const allRoomsForAssets: any[] = data.rooms || [];
   const allPricingForAssets: any[] = data.pricing || [];
@@ -3904,7 +3908,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                                     documentsRequired: room.documents_required || "",
                                   },
                                 })}>{t(lang, "p_ad_edit_unit_btn")}</button>
-                                {current && <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetPricing({ roomId: room.id, month: current.month, basePrice: String(current.base_price), cleaningFee: String(current.cleaning_fee) })}>{t(lang, "p_ad_edit_price_btn")}</button>}
+                                {current && <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetPricing({ roomId: room.id, month: current.month, basePrice: String(current.base_price), cleaningFee: String(current.cleaning_fee), assetType: prop.asset_type })}>{t(lang, "p_ad_edit_price_btn")}</button>}
                               </div>
                             </div>
                           );
@@ -3987,7 +3991,9 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                 <div style={{ ...card, width: 360, maxWidth: "92vw" }} onClick={e => e.stopPropagation()}>
                   <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>{t(lang, "p_ad_edit_price_title", { month: editAssetPricing.month })}</h3>
                   <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_ad_base_price_label")}</label><input style={input} type="number" value={editAssetPricing.basePrice} onChange={e => setEditAssetPricing({ ...editAssetPricing, basePrice: e.target.value })} /></div>
-                  <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_cleaning_label")}</label><input style={input} type="number" value={editAssetPricing.cleaningFee} onChange={e => setEditAssetPricing({ ...editAssetPricing, cleaningFee: e.target.value })} /></div>
+                  {!isVehicleAsset(editAssetPricing.assetType) && (
+                    <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_cleaning_label")}</label><input style={input} type="number" value={editAssetPricing.cleaningFee} onChange={e => setEditAssetPricing({ ...editAssetPricing, cleaningFee: e.target.value })} /></div>
+                  )}
                   <div style={{ display: "flex", gap: 10 }}>
                     <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
                       await updatePricingAction(editAssetPricing.roomId, editAssetPricing.month, Number(editAssetPricing.basePrice), Number(editAssetPricing.cleaningFee));
@@ -4067,11 +4073,16 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                 <div><label style={label}>{t(lang, "p_ad_low_season")}</label><input style={input} type="number" value={naPriceLow} onChange={e => setNaPriceLow(e.target.value)} /></div>
                 <div><label style={label}>{t(lang, "p_ad_mid_season")}</label><input style={input} type="number" value={naPriceMid} onChange={e => setNaPriceMid(e.target.value)} placeholder={t(lang, "p_ad_default_low")} /></div>
                 <div><label style={label}>{t(lang, "p_ad_high_season")}</label><input style={input} type="number" value={naPriceHigh} onChange={e => setNaPriceHigh(e.target.value)} placeholder={t(lang, "p_ad_default_low")} /></div>
-                <div><label style={label}>{t(lang, "p_ad_cleaning_fee_eur")}</label><input style={input} type="number" value={naCleaningFee} onChange={e => setNaCleaningFee(e.target.value)} /></div>
+                {!isVehicleAsset(naAssetType) && (
+                  <div><label style={label}>{t(lang, "p_ad_cleaning_fee_eur")}</label><input style={input} type="number" value={naCleaningFee} onChange={e => setNaCleaningFee(e.target.value)} /></div>
+                )}
               </div>
 
               <h3 style={{ ...h3Style, marginTop: 24 }}>{t(lang, "p_ad_photos")}</h3>
-              <input type="file" accept="image/*" multiple onChange={e => { if (e.target.files) handleNaImageFiles(e.target.files); }} />
+              <label style={{ ...btn("outline"), padding: "8px 16px", fontSize: 11, cursor: "pointer", display: "inline-block" }}>
+                {t(lang, "p_common_choose_file")}
+                <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => { if (e.target.files) handleNaImageFiles(e.target.files); }} />
+              </label>
               {naImages.length > 0 && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
                   {naImages.map((img, i) => (
@@ -4084,7 +4095,10 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
               )}
 
               <h3 style={{ ...h3Style, marginTop: 24 }}>{t(lang, "p_ad_pdf_sheet_optional")}</h3>
-              <input type="file" accept="application/pdf" onChange={e => { const f = e.target.files?.[0]; if (f) handleNaPdfFile(f); }} />
+              <label style={{ ...btn("outline"), padding: "8px 16px", fontSize: 11, cursor: "pointer", display: "inline-block" }}>
+                {t(lang, "p_common_choose_file")}
+                <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleNaPdfFile(f); }} />
+              </label>
               {naPdf && (
                 <div style={{ fontSize: 12, color: C.gold, marginTop: 8 }}>📄 {naPdf.name} <span style={{ cursor: "pointer", opacity: 0.7 }} onClick={() => setNaPdf(null)}>✕</span></div>
               )}
