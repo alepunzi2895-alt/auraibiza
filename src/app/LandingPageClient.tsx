@@ -62,6 +62,20 @@ const labelStyle: CSSProperties = {
 
 const WA_NUMBER = "34645265430";
 
+// ─── Loading spinner ─────────────────────────────────────────────────────────
+function Spinner({ size = 28, label }: { size?: number; label?: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+      <div style={{
+        width: size, height: size, borderRadius: "50%",
+        border: `2.5px solid ${C.border}`, borderTopColor: C.gold,
+        animation: "spin 0.8s linear infinite",
+      }} />
+      {label && <div style={{ fontSize: 12, color: C.textDim, fontFamily: FONT_B }}>{label}</div>}
+    </div>
+  );
+}
+
 // ─── Public Calendar ─────────────────────────────────────────────────────────
 function PublicCalendar({ roomId, onRangeSelect, selectedRange, assetType, lang }: {
   roomId: string;
@@ -141,7 +155,7 @@ function PublicCalendar({ roomId, onRangeSelect, selectedRange, assetType, lang 
           style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: "6px 12px", fontSize: 14 }}>▸</button>
       </div>
       {loading ? (
-        <div style={{ textAlign: "center", padding: 24, color: C.textDim, fontSize: 12 }}>{t(lang, "cal_loading")}</div>
+        <div style={{ padding: "36px 0" }}><Spinner label={t(lang, "cal_loading")} /></div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
           {dayAbbrevs(lang).map(d => (
@@ -332,6 +346,7 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
   // Galleria completa dell'asset aperto nel modal, caricata on-demand (la lista pubblica
   // porta solo la cover per non scaricare tutte le foto di tutti gli asset ad ogni visita)
   const [detailGallery, setDetailGallery] = useState<string[] | null>(null);
+  const [galleryLoading, setGalleryLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralReady, setReferralReady] = useState(false);
@@ -390,11 +405,13 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
 
   // Carica la galleria completa dell'asset solo quando si apre il suo dettaglio
   useEffect(() => {
-    if (!detailModal) { setDetailGallery(null); return; }
+    if (!detailModal) { setDetailGallery(null); setGalleryLoading(false); return; }
     const cover = thumbnails[detailModal.id];
     setDetailGallery(cover ? [cover] : []); // intanto mostra la thumbnail già in memoria
+    setGalleryLoading(true);
     getPropertyGallery(detailModal.id).then(res => {
       if (res.image) setDetailGallery(parseImages(res.image));
+      setGalleryLoading(false);
     });
   }, [detailModal?.id]);
 
@@ -1045,7 +1062,7 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
             }} onClick={e => e.stopPropagation()}>
 
               {/* Cover image */}
-              {images.length > 0 && (
+              {images.length > 0 ? (
                 <div style={{ height: 280, borderRadius: "20px 20px 0 0", overflow: "hidden", position: "relative", cursor: "zoom-in" }} onClick={() => setLightboxIndex(0)}>
                   <img src={images[0]} alt={prop.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,14,22,0.7) 0%, transparent 60%)" }} />
@@ -1053,6 +1070,12 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
                     style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
                   {prop.is_public === 0 && <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(200,169,110,0.2)", border: "1px solid rgba(200,169,110,0.5)", borderRadius: 20, padding: "4px 14px", fontSize: 11, color: C.goldLight, fontWeight: 700 }}>🔒 {t(lang, "badge_exclusive")}</div>}
                   {images.length > 1 && <div style={{ position: "absolute", bottom: 12, right: 16, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 11, padding: "3px 10px", borderRadius: 20 }}>🔍 {images.length}</div>}
+                </div>
+              ) : (
+                <div style={{ height: 280, borderRadius: "20px 20px 0 0", overflow: "hidden", position: "relative", background: C.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Spinner size={32} label={t(lang, "gallery_loading")} />
+                  <button onClick={(e) => { e.stopPropagation(); setDetailModal(null); setDetailRange({ start: null, end: null }); }}
+                    style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
                 </div>
               )}
 
@@ -1086,11 +1109,16 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
                 {localizedDescription(prop, lang) && <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.8, marginBottom: 24 }}>{localizedDescription(prop, lang)}</p>}
 
                 {/* Galleria miniature */}
-                {images.length > 1 && (
-                  <div style={{ display: "flex", gap: 8, marginBottom: 24, overflowX: "auto" }}>
+                {(images.length > 1 || (galleryLoading && images.length === 1)) && (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 24, overflowX: "auto", alignItems: "center" }}>
                     {images.map((img, i) => (
                       <img key={i} src={img} alt="" onClick={() => setLightboxIndex(i)} style={{ height: 64, width: 96, objectFit: "cover", borderRadius: 8, flexShrink: 0, border: `1px solid ${C.border}`, cursor: "zoom-in" }} />
                     ))}
+                    {galleryLoading && (
+                      <div style={{ height: 64, width: 96, borderRadius: 8, flexShrink: 0, border: `1px solid ${C.border}`, background: C.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Spinner size={18} />
+                      </div>
+                    )}
                   </div>
                 )}
 

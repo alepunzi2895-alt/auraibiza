@@ -77,6 +77,7 @@ const en: Dict = {
   whatsapp_write: "Write on WhatsApp",
   email_alt: "✉ Or write via email",
 
+  gallery_loading: "Loading photos...",
   cal_loading: "Loading...",
   cal_available: "Available", cal_booked: "Booked", cal_selected: "Selected",
   cal_nights_selected: "{n} {unit} selected",
@@ -449,6 +450,7 @@ const it: Dict = {
   whatsapp_write: "Scrivi su WhatsApp",
   email_alt: "✉ Oppure scrivi via email",
 
+  gallery_loading: "Caricamento foto...",
   cal_loading: "Caricamento...",
   cal_available: "Disponibile", cal_booked: "Occupato", cal_selected: "Selezionato",
   cal_nights_selected: "{n} {unit} selezionate",
@@ -821,6 +823,7 @@ const es: Dict = {
   whatsapp_write: "Escribir por WhatsApp",
   email_alt: "✉ O escribe por email",
 
+  gallery_loading: "Cargando fotos...",
   cal_loading: "Cargando...",
   cal_available: "Disponible", cal_booked: "Ocupado", cal_selected: "Seleccionado",
   cal_nights_selected: "{n} {unit} seleccionadas",
@@ -1193,6 +1196,7 @@ const de: Dict = {
   whatsapp_write: "Auf WhatsApp schreiben",
   email_alt: "✉ Oder per E-Mail schreiben",
 
+  gallery_loading: "Fotos werden geladen...",
   cal_loading: "Wird geladen...",
   cal_available: "Verfügbar", cal_booked: "Belegt", cal_selected: "Ausgewählt",
   cal_nights_selected: "{n} {unit} ausgewählt",
@@ -1565,6 +1569,7 @@ const fr: Dict = {
   whatsapp_write: "Écrire sur WhatsApp",
   email_alt: "✉ Ou écrivez par email",
 
+  gallery_loading: "Chargement des photos...",
   cal_loading: "Chargement...",
   cal_available: "Disponible", cal_booked: "Occupé", cal_selected: "Sélectionné",
   cal_nights_selected: "{n} {unit} sélectionnées",
