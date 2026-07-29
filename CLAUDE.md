@@ -71,6 +71,12 @@ Due metodi, entrambi passano da NextAuth v4 (`src/lib/auth.ts`), sessione JWT pe
 
 In entrambi i casi un utente `status: 'pending'` non ottiene mai una sessione (stesso comportamento di sempre) — per Google, il `signIn` callback reindirizza a `/platform?error=pending`.
 
+### Profilo personale e reset password
+
+Ogni utente aggiorna i propri dati (nome, cognome, email, telefono, servizi, avatar) da **My Profile** (click su avatar/nickname nell'header di `Home`) — modale condivisa `MyProfileModal` in `platform/page.tsx`, action `updateOwnProfile()`. Nickname sempre read-only. Stesso modale include il cambio password (`changePasswordAction()`, unico punto d'accesso — non più duplicato in Concierge/Owner).
+
+Reset password dimenticata via email (Resend, wrapper in `src/lib/email.ts`): link "Forgot your password?" in login → `requestPasswordReset(identifier, lang)` genera un token (`reset_token`/`reset_token_expires` su `users`, scadenza 1h) e invia l'email — risposta sempre generica per non rivelare quali account esistono. Account solo-Google (`password IS NULL`) ricevono un avviso a usare "Continua con Google", nessun token. Il link punta a `/platform?resetToken=<token>`, intercettato dallo stesso `useEffect` che legge `?register=1`/`?error=pending`, e mostra il form "Set a new password" → `resetPasswordWithToken()`.
+
 ## Registrazione utenti
 
 Flow in 2 step:
@@ -131,7 +137,7 @@ Password non riportata in chiaro nella documentazione.
 - [ ] Dashboard KPI per owner e admin (revenue mensile, occupancy rate, top concierge)
 - [ ] Sezione dashboard ispirata a ibizabeyond.com/reseller (da analizzare con screenshot)
 - [ ] PDF ricevute prenotazione (lato server con react-pdf)
-- [ ] Notifiche email (Resend o Nodemailer)
+- [ ] Notifiche email su nuova prenotazione / cambio status (a `info.auraibiza@gmail.com` + concierge/agent/cliente) — riusa `src/lib/email.ts` già introdotto per il reset password
 - [ ] Stripe per pagamenti online
 - [ ] Calendario vista mensile aggregata multi-property
 - [ ] Export CSV prenotazioni e pagamenti

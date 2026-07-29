@@ -17,6 +17,7 @@ import {
   updatePropertyPdf, removePropertyPdf,
   deletePropertyAction, deleteRoomAction,
   changePasswordAction, approveUser, rejectUser, updateUserRole, deleteUserAction,
+  updateOwnProfile, requestPasswordReset, resetPasswordWithToken,
   setCommissionRule, updatePropertyAssetType,
   createManagedUser, bulkSetRoomPricing,
   getBookingRequests, updateBookingRequestStatus,
@@ -799,10 +800,6 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
   const [msg, setMsg] = useState("");
   const [viewNotes, setViewNotes] = useState<string | null>(null);
   const [confirmingDeleteMethod, setConfirmingDeleteMethod] = useState<string | null>(null);
-  const [pwCurrent, setPwCurrent] = useState("");
-  const [pwNew, setPwNew] = useState("");
-  const [pwConfirm, setPwConfirm] = useState("");
-  const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   // Filters
   const [searchFilter, setSearchFilter] = useState("");
@@ -1565,24 +1562,6 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
               </div>
             </div>
 
-            <div style={{ ...card, marginTop: 16 }}>
-              <h3 style={h3Style}>{t(lang, "p_cd_change_password")}</h3>
-              <p style={{ color: C.textDim, fontSize: 13, marginBottom: 20 }}>{t(lang, "p_cd_change_password_desc")} <strong style={{ color: C.gold }}>{user.nickname}</strong>.</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 400 }}>
-                <div><label style={label}>{t(lang, "p_cd_current_password")}</label><input type="password" style={input} value={pwCurrent} onChange={e => setPwCurrent(e.target.value)} placeholder="••••••••" /></div>
-                <div><label style={label}>{t(lang, "p_cd_new_password")}</label><input type="password" style={input} value={pwNew} onChange={e => setPwNew(e.target.value)} placeholder={t(lang, "p_password_ph")} /></div>
-                <div><label style={label}>{t(lang, "p_cd_confirm_new_password")}</label><input type="password" style={input} value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} placeholder="••••••••" /></div>
-                {pwMsg && <div style={{ fontSize: 12, padding: "8px 12px", borderRadius: 4, background: pwMsg.ok ? C.success + "20" : C.danger + "20", color: pwMsg.ok ? C.success : C.danger, border: `1px solid ${pwMsg.ok ? C.success : C.danger}44` }}>{pwMsg.text}</div>}
-                <button style={{ ...btn("gold"), alignSelf: "flex-start" }} onClick={async () => {
-                  setPwMsg(null);
-                  if (!pwCurrent || !pwNew || !pwConfirm) { setPwMsg({ text: t(lang, "p_cd_fill_all_fields"), ok: false }); return; }
-                  if (pwNew !== pwConfirm) { setPwMsg({ text: t(lang, "p_cd_passwords_dont_match"), ok: false }); return; }
-                  const res = await changePasswordAction(user.id, pwCurrent, pwNew);
-                  if ((res as any).error) { setPwMsg({ text: (res as any).error, ok: false }); }
-                  else { setPwMsg({ text: t(lang, "p_cd_password_updated"), ok: true }); setPwCurrent(""); setPwNew(""); setPwConfirm(""); }
-                }}>{t(lang, "p_cd_update_password")}</button>
-              </div>
-            </div>
           </div>
         )}
         {viewNotes && (
@@ -1748,10 +1727,6 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
   const [localFee, setLocalFee] = useState("0");
   const [viewNotes, setViewNotes] = useState<string | null>(null);
   const [confirmingDeleteMethod, setConfirmingDeleteMethod] = useState<string | null>(null);
-  const [pwCurrent, setPwCurrent] = useState("");
-  const [pwNew, setPwNew] = useState("");
-  const [pwConfirm, setPwConfirm] = useState("");
-  const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [payModal, setPayModal] = useState<any>(null);
   const [payModalIsCollab, setPayModalIsCollab] = useState(false);
@@ -3412,24 +3387,6 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
               </div>
             </div>
 
-            <div style={{ ...card, marginTop: 16 }}>
-              <h3 style={h3Style}>{t(lang, "p_cd_change_password")}</h3>
-              <p style={{ color: C.textDim, fontSize: 13, marginBottom: 20 }}>{t(lang, "p_cd_change_password_desc")} <strong style={{ color: C.gold }}>{user.nickname}</strong>.</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 400 }}>
-                <div><label style={label}>{t(lang, "p_cd_current_password")}</label><input type="password" style={input} value={pwCurrent} onChange={e => setPwCurrent(e.target.value)} placeholder="••••••••" /></div>
-                <div><label style={label}>{t(lang, "p_cd_new_password")}</label><input type="password" style={input} value={pwNew} onChange={e => setPwNew(e.target.value)} placeholder={t(lang, "p_password_ph")} /></div>
-                <div><label style={label}>{t(lang, "p_cd_confirm_new_password")}</label><input type="password" style={input} value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} placeholder="••••••••" /></div>
-                {pwMsg && <div style={{ fontSize: 12, padding: "8px 12px", borderRadius: 4, background: pwMsg.ok ? C.success + "20" : C.danger + "20", color: pwMsg.ok ? C.success : C.danger, border: `1px solid ${pwMsg.ok ? C.success : C.danger}44` }}>{pwMsg.text}</div>}
-                <button style={{ ...btn("gold"), alignSelf: "flex-start" }} onClick={async () => {
-                  setPwMsg(null);
-                  if (!pwCurrent || !pwNew || !pwConfirm) { setPwMsg({ text: t(lang, "p_cd_fill_all_fields"), ok: false }); return; }
-                  if (pwNew !== pwConfirm) { setPwMsg({ text: t(lang, "p_cd_passwords_dont_match"), ok: false }); return; }
-                  const res = await changePasswordAction(user.id, pwCurrent, pwNew);
-                  if ((res as any).error) { setPwMsg({ text: (res as any).error, ok: false }); }
-                  else { setPwMsg({ text: t(lang, "p_cd_password_updated"), ok: true }); setPwCurrent(""); setPwNew(""); setPwConfirm(""); }
-                }}>{t(lang, "p_cd_update_password")}</button>
-              </div>
-            </div>
           </div>
         )}
         {viewNotes && (
@@ -4609,6 +4566,171 @@ const useIsMobile = () => {
   return isMobile;
 };
 
+function MyProfileModal({ user, allUsers, refresh, lang, onClose }: { user: User; allUsers: any[]; refresh: () => void; lang: Lang; onClose: () => void }) {
+  const me = useMemo(() => allUsers.find((u: any) => u.id === user.id) || {}, [allUsers, user.id]);
+  const myServices: string[] = useMemo(() => { try { return me.services ? JSON.parse(me.services) : []; } catch { return []; } }, [me.services]);
+  const [initialPrefix, initialPhone] = useMemo(() => {
+    const raw = (me.phone || "").trim();
+    if (!raw) return ["+39", ""];
+    const parts = raw.split(" ");
+    if (COUNTRY_CODES.some(c => c.code === parts[0])) return [parts[0], parts.slice(1).join(" ")];
+    return ["+39", raw];
+  }, [me.phone]);
+
+  const [firstName, setFirstName] = useState(me.first_name || "");
+  const [lastName, setLastName] = useState(me.last_name || "");
+  const [email, setEmail] = useState(me.email || "");
+  const [phonePrefix, setPhonePrefix] = useState(initialPrefix);
+  const [phone, setPhone] = useState(initialPhone);
+  const [avatar, setAvatar] = useState<string | null>(me.avatar || null);
+  const [services, setServices] = useState<string[]>(myServices);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const [pwCurrent, setPwCurrent] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const isGoogleOnly = !me.password;
+  const servicesList = user.role === "owner" ? OWNER_SERVICES : CONCIERGE_SERVICES;
+  const toggleService = (id: string) => setServices(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+
+  const handleSave = async () => {
+    setMsg(null);
+    if (!email.trim()) { setMsg({ text: t(lang, "p_err_email_required"), ok: false }); return; }
+    setSaving(true);
+    const res = await updateOwnProfile(user.id, {
+      firstName, lastName, email,
+      phone: phone.trim() ? `${phonePrefix} ${phone.trim()}` : "",
+      services: user.role === "admin" ? [] : services,
+      avatar: avatar || undefined,
+    });
+    setSaving(false);
+    if ((res as any).error) setMsg({ text: (res as any).error, ok: false });
+    else { setMsg({ text: t(lang, "p_profile_updated"), ok: true }); refresh(); }
+  };
+
+  const handlePasswordChange = async () => {
+    setPwMsg(null);
+    if (!pwCurrent || !pwNew || !pwConfirm) { setPwMsg({ text: t(lang, "p_cd_fill_all_fields"), ok: false }); return; }
+    if (pwNew !== pwConfirm) { setPwMsg({ text: t(lang, "p_cd_passwords_dont_match"), ok: false }); return; }
+    const res = await changePasswordAction(user.id, pwCurrent, pwNew);
+    if ((res as any).error) setPwMsg({ text: (res as any).error, ok: false });
+    else { setPwMsg({ text: t(lang, "p_cd_password_updated"), ok: true }); setPwCurrent(""); setPwNew(""); setPwConfirm(""); }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000, backdropFilter: "blur(8px)" }} onClick={onClose}>
+      <div style={{ ...cardGlass, width: 480, maxWidth: "92vw", maxHeight: "88vh", overflowY: "auto", textAlign: "left" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h2 style={{ ...h2Style, marginBottom: 0, fontSize: 22 }}>{t(lang, "p_profile_title")}</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: C.textDim, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+
+        {/* Avatar */}
+        <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 20 }}>
+          <label style={{ cursor: "pointer", flexShrink: 0 }}>
+            <div style={{ width: 80, height: 80, borderRadius: "50%", overflow: "hidden", border: `2px dashed ${avatar ? C.gold : C.border}`, background: C.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {avatar ? <img src={avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ fontSize: 22 }}>📸</div>}
+            </div>
+            <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = ev => {
+                const base64 = ev.target?.result as string;
+                const img = new Image();
+                img.src = base64;
+                img.onload = () => {
+                  const canvas = document.createElement("canvas");
+                  const size = Math.min(img.width, img.height, 400);
+                  canvas.width = size; canvas.height = size;
+                  const ctx = canvas.getContext("2d")!;
+                  const ox = (img.width - size) / 2;
+                  const oy = (img.height - size) / 2;
+                  ctx.drawImage(img, ox, oy, size, size, 0, 0, size, size);
+                  setAvatar(canvas.toDataURL("image/jpeg", 0.75));
+                };
+              };
+              reader.readAsDataURL(file);
+            }} />
+          </label>
+          <div>
+            <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>{t(lang, "p_profile_photo")}</div>
+            <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.7 }}>{t(lang, "p_profile_photo_hint")}</div>
+            {avatar && <button type="button" onClick={() => setAvatar(null)} style={{ marginTop: 8, background: "none", border: "none", color: C.danger, fontSize: 11, cursor: "pointer", padding: 0 }}>{t(lang, "p_remove_photo")}</button>}
+          </div>
+        </div>
+
+        {/* Nickname (read-only) */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={label}>{t(lang, "p_nickname_required")}</label>
+          <input style={{ ...input, opacity: 0.6, cursor: "not-allowed" }} value={user.nickname} disabled />
+          <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{t(lang, "p_profile_nickname_locked_hint")}</div>
+        </div>
+
+        {/* Personal info */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div><label style={label}>{t(lang, "p_first_name")}</label><input style={input} value={firstName} onChange={e => setFirstName(e.target.value)} /></div>
+          <div><label style={label}>{t(lang, "p_last_name")}</label><input style={input} value={lastName} onChange={e => setLastName(e.target.value)} /></div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+          <div><label style={label}>{t(lang, "p_email_required")}</label><input style={input} type="email" value={email} onChange={e => setEmail(e.target.value)} /></div>
+          <div>
+            <label style={label}>{t(lang, "p_phone")}</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select style={{ ...sel, width: 100, flexShrink: 0 }} value={phonePrefix} onChange={e => setPhonePrefix(e.target.value)}>
+                {COUNTRY_CODES.map(c => <option key={c.code + c.name} value={c.code}>{c.flag} {c.code}</option>)}
+              </select>
+              <input style={{ ...input, flex: 1, minWidth: 0 }} type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="340 1234567" />
+            </div>
+          </div>
+        </div>
+
+        {/* Services — non per admin */}
+        {user.role !== "admin" && (
+          <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>
+              {user.role === "owner" ? t(lang, "p_what_do_you_offer") : t(lang, "p_services_offered")}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {servicesList.map(s => {
+                const active = services.includes(s.id);
+                return (
+                  <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, cursor: "pointer", border: active ? `1px solid ${C.borderGold}` : `1px solid ${C.border}`, background: active ? C.goldGlow : "rgba(255,255,255,0.02)" }}>
+                    <input type="checkbox" checked={active} onChange={() => toggleService(s.id)} style={{ accentColor: C.gold, width: 14, height: 14 }} />
+                    <span style={{ fontSize: 12, color: active ? C.gold : C.textMuted, fontFamily: FONT_B, fontWeight: active ? 600 : 400 }}>{serviceLabel(lang, s.id)}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {msg && <div style={{ fontSize: 12, padding: "8px 12px", borderRadius: 4, marginBottom: 14, background: msg.ok ? C.success + "20" : C.danger + "20", color: msg.ok ? C.success : C.danger, border: `1px solid ${msg.ok ? C.success : C.danger}44` }}>{msg.text}</div>}
+        <button style={{ ...btn("gold"), width: "100%", marginBottom: 8 }} disabled={saving} onClick={handleSave}>{t(lang, "p_common_save")}</button>
+
+        {/* Password */}
+        <div style={{ marginTop: 20, paddingTop: 20, borderTop: `1px solid ${C.border}` }}>
+          <h3 style={{ ...h3Style, fontSize: 16 }}>{t(lang, "p_cd_change_password")}</h3>
+          {isGoogleOnly ? (
+            <p style={{ fontSize: 12, color: C.textDim, lineHeight: 1.7 }}>{t(lang, "p_profile_google_only_password")}</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div><label style={label}>{t(lang, "p_cd_current_password")}</label><input type="password" style={input} value={pwCurrent} onChange={e => setPwCurrent(e.target.value)} placeholder="••••••••" /></div>
+              <div><label style={label}>{t(lang, "p_cd_new_password")}</label><input type="password" style={input} value={pwNew} onChange={e => setPwNew(e.target.value)} placeholder={t(lang, "p_password_ph")} /></div>
+              <div><label style={label}>{t(lang, "p_cd_confirm_new_password")}</label><input type="password" style={input} value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} placeholder="••••••••" /></div>
+              {pwMsg && <div style={{ fontSize: 12, padding: "8px 12px", borderRadius: 4, background: pwMsg.ok ? C.success + "20" : C.danger + "20", color: pwMsg.ok ? C.success : C.danger, border: `1px solid ${pwMsg.ok ? C.success : C.danger}44` }}>{pwMsg.text}</div>}
+              <button style={{ ...btn("gold"), alignSelf: "flex-start" }} onClick={handlePasswordChange}>{t(lang, "p_cd_update_password")}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const isMobile = useIsMobile();
   const { data: session } = useSession();
@@ -4623,6 +4745,17 @@ export default function Home() {
   const [pdfPreview, setPdfPreview] = useState<{ booking: Booking; room: Room | undefined; property: Property | undefined } | null>(null);
   const [lang, setLang] = useState<Lang>(DEFAULT_LANG);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [forgotIdentifier, setForgotIdentifier] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [resetToken, setResetToken] = useState<string | null>(null);
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [resetMsg, setResetMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [resetDone, setResetDone] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? window.localStorage.getItem("aura_platform_lang") : null;
@@ -4663,9 +4796,24 @@ export default function Home() {
         alert(t(lang, "p_oauth_error_generic"));
         window.history.replaceState({}, "", window.location.pathname);
       }
+      const rt = params.get("resetToken");
+      if (rt) setResetToken(rt);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleResetPassword = async () => {
+    setResetMsg(null);
+    if (!resetToken) return;
+    if (resetNewPassword.length < 6) { setResetMsg({ text: t(lang, "p_cd_fill_all_fields"), ok: false }); return; }
+    if (resetNewPassword !== resetConfirmPassword) { setResetMsg({ text: t(lang, "p_reset_password_mismatch"), ok: false }); return; }
+    setResetLoading(true);
+    const res = await resetPasswordWithToken(resetToken, resetNewPassword);
+    setResetLoading(false);
+    if ((res as any).error) { setResetMsg({ text: (res as any).error, ok: false }); return; }
+    setResetDone(true);
+    window.history.replaceState({}, "", window.location.pathname);
+  };
 
   // Precompila i dati del profilo Google (nome, avatar) quando arriva una
   // nuova identità Google non ancora legata a nessun account.
@@ -4863,7 +5011,32 @@ export default function Home() {
 
           <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }` }} />
 
-          {isNewGoogleUser ? (
+          {resetToken ? (
+            <div style={cardGlass}>
+              <h2 style={{ ...h2Style, textAlign: "center", marginBottom: 12, fontSize: 18, letterSpacing: "2px" }}>{t(lang, "p_reset_password_title")}</h2>
+              {resetDone ? (
+                <>
+                  <div style={{ fontSize: 13, color: C.success, textAlign: "center", padding: "16px 0" }}>{t(lang, "p_reset_password_success")}</div>
+                  <button type="button" style={{ ...btn("gold"), width: "100%", marginTop: 12 }} onClick={() => setResetToken(null)}>{t(lang, "p_back_to_login")}</button>
+                </>
+              ) : (
+                <form onSubmit={e => { e.preventDefault(); handleResetPassword(); }}>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={label}>{t(lang, "p_reset_password_new")}</label>
+                    <input style={input} type="password" value={resetNewPassword} onChange={e => setResetNewPassword(e.target.value)} placeholder={t(lang, "p_password_ph")} autoComplete="new-password" />
+                  </div>
+                  <div style={{ marginBottom: 20 }}>
+                    <label style={label}>{t(lang, "p_reset_password_confirm")}</label>
+                    <input style={input} type="password" value={resetConfirmPassword} onChange={e => setResetConfirmPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
+                  </div>
+                  {resetMsg && <div style={{ fontSize: 12, padding: "8px 12px", borderRadius: 4, marginBottom: 16, background: resetMsg.ok ? C.success + "20" : C.danger + "20", color: resetMsg.ok ? C.success : C.danger, border: `1px solid ${resetMsg.ok ? C.success : C.danger}44` }}>{resetMsg.text}</div>}
+                  <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "2px" }} type="submit" disabled={resetLoading}>
+                    {t(lang, "p_reset_password_submit")}
+                  </button>
+                </form>
+              )}
+            </div>
+          ) : isNewGoogleUser ? (
             <div style={{ ...cardGlass, textAlign: "left", maxHeight: "85vh", overflowY: "auto" }}>
               <div style={{ marginBottom: 24 }}>
                 <div style={{ fontFamily: FONT, fontSize: 18, color: C.goldLight }}>{t(lang, "p_complete_profile")}</div>
@@ -4971,7 +5144,7 @@ export default function Home() {
           ) : (
           <>
           {/* Login form */}
-          {!isRegister && (
+          {!isRegister && !forgotPasswordOpen && (
             <div style={cardGlass}>
               <h2 style={{ ...h2Style, textAlign: "center", marginBottom: 28, fontSize: 18, letterSpacing: "3px" }}>{t(lang, "p_login_title")}</h2>
               <form onSubmit={e => { e.preventDefault(); handleLogin(); }}>
@@ -4979,9 +5152,14 @@ export default function Home() {
                   <label style={label}>{t(lang, "p_nickname")}</label>
                   <input style={input} value={nickname} onChange={e => setNickname(e.target.value)} placeholder={t(lang, "p_nickname_ph")} autoComplete="username" />
                 </div>
-                <div style={{ marginBottom: 28 }}>
+                <div style={{ marginBottom: 10 }}>
                   <label style={label}>{t(lang, "p_password")}</label>
                   <input style={input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+                </div>
+                <div style={{ textAlign: "right", marginBottom: 18 }}>
+                  <button type="button" style={{ background: "none", border: "none", color: C.textDim, fontSize: 11, cursor: "pointer", padding: 0, textDecoration: "underline" }} onClick={() => { setForgotPasswordOpen(true); setForgotSent(false); setForgotIdentifier(""); }}>
+                    {t(lang, "p_forgot_password_link")}
+                  </button>
                 </div>
                 <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "2px" }} type="submit">{t(lang, "p_login_button")}</button>
               </form>
@@ -4993,6 +5171,42 @@ export default function Home() {
                 </button>
               </div>
               <div style={{ marginTop: 12, fontSize: 10, color: C.textDim, textAlign: "center", fontStyle: "italic" }}>{t(lang, "p_login_footer")}</div>
+            </div>
+          )}
+
+          {/* Forgot password mini-form */}
+          {!isRegister && forgotPasswordOpen && (
+            <div style={cardGlass}>
+              <h2 style={{ ...h2Style, textAlign: "center", marginBottom: 12, fontSize: 18, letterSpacing: "2px" }}>{t(lang, "p_forgot_password_title")}</h2>
+              <p style={{ color: C.textDim, fontSize: 12, marginBottom: 24, textAlign: "center", lineHeight: 1.7 }}>{t(lang, "p_forgot_password_desc")}</p>
+              {forgotSent ? (
+                <>
+                  <div style={{ fontSize: 13, color: C.success, textAlign: "center", padding: "16px 0" }}>{t(lang, "p_forgot_password_sent")}</div>
+                  <button type="button" style={{ ...btn(), width: "100%", marginTop: 12 }} onClick={() => { setForgotPasswordOpen(false); setForgotSent(false); }}>{t(lang, "p_back_to_login")}</button>
+                </>
+              ) : (
+                <form onSubmit={async e => {
+                  e.preventDefault();
+                  if (!forgotIdentifier.trim()) return;
+                  setForgotLoading(true);
+                  await requestPasswordReset(forgotIdentifier.trim(), lang);
+                  setForgotLoading(false);
+                  setForgotSent(true);
+                }}>
+                  <div style={{ marginBottom: 24 }}>
+                    <label style={label}>{t(lang, "p_nickname")} / Email</label>
+                    <input style={input} value={forgotIdentifier} onChange={e => setForgotIdentifier(e.target.value)} placeholder={t(lang, "p_nickname_ph")} autoComplete="username" />
+                  </div>
+                  <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "2px" }} type="submit" disabled={forgotLoading}>
+                    {t(lang, "p_forgot_password_submit")}
+                  </button>
+                  <div style={{ marginTop: 16, textAlign: "center" }}>
+                    <button type="button" style={{ background: "none", border: "none", color: C.textDim, fontSize: 12, cursor: "pointer", padding: 0, textDecoration: "underline" }} onClick={() => setForgotPasswordOpen(false)}>
+                      {t(lang, "p_back_to_login")}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 
@@ -5177,7 +5391,7 @@ export default function Home() {
         }}>
           <LogoFull size={38} isMobile={isMobile} />
           <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => setProfileModalOpen(true)} title={t(lang, "p_profile_title")}>
               {/* Avatar o emoji ruolo */}
               {(user as any).avatar ? (
                 <img src={(user as any).avatar} alt={user.nickname} style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", border: `1px solid ${C.borderGold}`, flexShrink: 0 }} />
@@ -5231,6 +5445,9 @@ export default function Home() {
         {(user.role === "concierge" || user.role === "agent" || user.role === "owner") && <div className="no-print"><HelperBot role={user.role} lang={lang} /></div>}
       </div>
       <PdfPreview data={pdfPreview} onClose={() => setPdfPreview(null)} />
+      {profileModalOpen && (
+        <MyProfileModal user={user} allUsers={dbData?.users || []} refresh={fetchAll} lang={lang} onClose={() => setProfileModalOpen(false)} />
+      )}
     </>
   );
 }

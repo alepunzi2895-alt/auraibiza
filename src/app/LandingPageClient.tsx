@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, CSSProperties } from "react";
 import "leaflet/dist/leaflet.css";
 import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf, getPropertyGallery, chatBookingAssistant, getPropertyThumbnails, getPropertyCoverImages } from "./actions";
 import { LANGUAGES, Lang, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, assetTypeLabel, localizedDescription, isVehicleAsset } from "@/lib/i18n";
+import { COUNTRY_CODES } from "@/lib/countryCodes";
 
 // ─── Design tokens (standalone, no import from platform) ─────────────────────
 const C = {
@@ -353,6 +354,7 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
 
   // Form state
   const [form, setForm] = useState({ name:"", email:"", phone:"", checkIn:"", checkOut:"", guests:"1", message:"" });
+  const [phonePrefix, setPhonePrefix] = useState("+39");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [formErr, setFormErr] = useState("");
@@ -498,7 +500,7 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
     const res = await createBookingRequest({
       propertyId: modal?.property?.id,
       roomId: modal?.room?.id,
-      clientName: form.name, clientEmail: form.email, clientPhone: form.phone,
+      clientName: form.name, clientEmail: form.email, clientPhone: form.phone.trim() ? `${phonePrefix} ${form.phone.trim()}` : "",
       checkIn: form.checkIn, checkOut: form.checkOut,
       guests: parseInt(form.guests) || 1, message: form.message,
       referralCode: referralCode || undefined,
@@ -1308,7 +1310,12 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
                   </div>
                   <div>
                     <label style={labelStyle}>{t(lang, "req_phone")}</label>
-                    <input style={inputStyle} type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+39 340 ..." />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <select style={{ ...inputStyle, appearance: "none" as const, width: 100, flexShrink: 0 }} value={phonePrefix} onChange={e => setPhonePrefix(e.target.value)}>
+                        {COUNTRY_CODES.map(c => <option key={c.code + c.name} value={c.code}>{c.flag} {c.code}</option>)}
+                      </select>
+                      <input style={{ ...inputStyle, flex: 1, minWidth: 0 }} type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="340 1234567" />
+                    </div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>

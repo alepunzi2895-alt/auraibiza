@@ -2,9 +2,11 @@
 
 import { db } from "@/lib/db";
 import { revalidatePath, unstable_cache } from "next/cache";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
+import { sendPasswordResetEmail, sendGoogleOnlyNotice } from "@/lib/email";
+import type { Lang } from "@/lib/i18n";
 
 // Miniatura leggera (usata solo nella lista pubblica /home) generata una volta
 // alla scrittura, non ad ogni lettura: evita di ritrasferire la cover a piena
@@ -70,7 +72,7 @@ export async function initDatabase() {
     // nuove migrazioni non verranno mai eseguite (il check corto-circuita
     // prima di arrivarci).
     try {
-      const check = await db.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_rooms_car_category'");
+      const check = await db.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_users_reset_token'");
       if (check.rows.length > 0) {
         dbReady = true;
         return { success: true };
@@ -150,6 +152,8 @@ export async function initDatabase() {
       "ALTER TABLE rooms ADD COLUMN documents_required TEXT",
       "ALTER TABLE bookings ADD COLUMN pickup_time TEXT",
       "ALTER TABLE bookings ADD COLUMN dropoff_time TEXT",
+      "ALTER TABLE users ADD COLUMN reset_token TEXT",
+      "ALTER TABLE users ADD COLUMN reset_token_expires INTEGER",
     ];
     // `dbReady` è un flag in memoria: si azzera ad ogni cold start serverless,
     // quindi queste migrazioni (quasi sempre no-op, la colonna esiste già) si
@@ -168,6 +172,7 @@ export async function initDatabase() {
       "CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)",
       "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
       "CREATE INDEX IF NOT EXISTS idx_rooms_car_category ON rooms(car_category)",
+      "CREATE INDEX IF NOT EXISTS idx_users_reset_token ON users(reset_token)",
     ];
     await Promise.allSettled(indexes.map(sql => db.execute(sql)));
 
@@ -969,6 +974,76 @@ export async function changePasswordAction(userId: string, currentPassword: stri
     revalidatePath("/");
     return { success: true };
   } catch (error) { return { error: String(error) }; }
+}
+
+export async function updateOwnProfile(userId: string, profile: {
+  firstName?: string; lastName?: string; email: string; phone?: string;
+  services?: string[]; avatar?: string;
+}) {
+  try {
+    const email = profile.email?.trim().toLowerCase() || "";
+    if (!email) return { success: false, error: "L'email è obbligatoria." };
+    if (!isValidEmail(email)) return { success: false, error: "Email non valida." };
+    const existingEmail = await db.execute({ sql: "SELECT id FROM users WHERE email = ? AND id != ?", args: [email, userId] });
+    if (existingEmail.rows.length > 0) return { success: false, error: "Email già in uso." };
+    await db.execute({
+      sql: "UPDATE users SET first_name = ?, last_name = ?, email = ?, phone = ?, services = ?, avatar = ? WHERE id = ?",
+      args: [
+        profile.firstName || null, profile.lastName || null, email, profile.phone || null,
+        profile.services?.length ? JSON.stringify(profile.services) : null,
+        profile.avatar || null,
+        userId,
+      ],
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+// Risposta sempre generica (success:true) indipendentemente dal fatto che l'utente
+// sia stato trovato o meno, per non rivelare quali nickname/email esistono davvero.
+export async function requestPasswordReset(identifier: string, lang: Lang = "it") {
+  try {
+    const idf = identifier.trim().toLowerCase();
+    if (!idf) return { success: true };
+    const res = await db.execute({ sql: "SELECT * FROM users WHERE nickname = ? OR email = ?", args: [idf, idf] });
+    if (res.rows.length === 0) return { success: true };
+    const user = res.rows[0] as any;
+    if (!user.email) return { success: true };
+    if (!user.password) {
+      // Account solo-Google: nessun token di reset, solo un avviso a usare "Continua con Google".
+      await sendGoogleOnlyNotice(user.email, lang);
+      return { success: true };
+    }
+    const token = randomBytes(32).toString("hex");
+    const expires = Date.now() + 60 * 60 * 1000;
+    await db.execute({ sql: "UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?", args: [token, expires, user.id] });
+    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const resetUrl = `${baseUrl}/platform?resetToken=${token}`;
+    await sendPasswordResetEmail(user.email, resetUrl, lang);
+    return { success: true };
+  } catch (error) {
+    console.error("requestPasswordReset error:", error);
+    return { success: true };
+  }
+}
+
+export async function resetPasswordWithToken(token: string, newPassword: string) {
+  try {
+    if (newPassword.length < 6) return { success: false, error: "La password deve essere di almeno 6 caratteri." };
+    const res = await db.execute({ sql: "SELECT id, reset_token_expires FROM users WHERE reset_token = ?", args: [token] });
+    if (res.rows.length === 0) return { success: false, error: "Link non valido o già utilizzato." };
+    const user = res.rows[0] as any;
+    if (!user.reset_token_expires || Number(user.reset_token_expires) < Date.now()) {
+      return { success: false, error: "Il link è scaduto. Richiedi un nuovo reset." };
+    }
+    await db.execute({
+      sql: "UPDATE users SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?",
+      args: [hashPassword(newPassword), user.id],
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) { return { success: false, error: String(error) }; }
 }
 
 export async function deletePaymentMethod(id: string) {
