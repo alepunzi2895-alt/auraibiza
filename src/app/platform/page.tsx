@@ -26,6 +26,7 @@ import {
   setRoomIcalUrl, syncRoomIcal, getPropertyGallery,
 } from "../actions";
 import { LANGUAGES, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, isDayBasedAsset, type Lang } from "@/lib/i18n";
+import { COUNTRY_CODES } from "@/lib/countryCodes";
 
 const IBIZA_CENTER: [number, number] = [38.9067, 1.4206];
 
@@ -4318,8 +4319,8 @@ function GoogleDivider({ lang, onClick }: { lang: Lang; onClick: () => void }) {
       <button type="button" onClick={onClick} style={{
         width: "100%", padding: "12px 20px", fontSize: 12, letterSpacing: "0.5px",
         display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-        background: "#fff", color: "#3c4043", border: "1px solid #dadce0", borderRadius: 8,
-        cursor: "pointer", fontFamily: FONT_B, fontWeight: 600,
+        background: "rgba(255,255,255,0.04)", color: C.text, border: `1px solid ${C.borderGold}`, borderRadius: 8,
+        cursor: "pointer", fontFamily: FONT_B, fontWeight: 600, transition: "all 0.2s",
       }}>
         <GoogleIcon />
         {t(lang, "p_continue_with_google")}
@@ -4370,6 +4371,7 @@ export default function Home() {
   const [regLastName, setRegLastName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPhone, setRegPhone] = useState("");
+  const [regPhonePrefix, setRegPhonePrefix] = useState("+39");
   const [regServices, setRegServices] = useState<string[]>([]);
   const [regAvatar, setRegAvatar] = useState<string | null>(null);
   const [regStep, setRegStep] = useState<1 | 2>(1);
@@ -4444,7 +4446,7 @@ export default function Home() {
     setLoading(true);
     const res = await registerUser(nickname, password, regRole, {
       firstName: regFirstName, lastName: regLastName,
-      email: regEmail, phone: regPhone, services: regServices,
+      email: regEmail, phone: regPhone.trim() ? `${regPhonePrefix} ${regPhone.trim()}` : "", services: regServices,
       avatar: regAvatar || undefined,
     });
     if ((res as any).error) {
@@ -4454,7 +4456,7 @@ export default function Home() {
     }
     alert(t(lang, "p_register_success"));
     setIsRegister(false);
-    setPassword(""); setRegFirstName(""); setRegLastName(""); setRegEmail(""); setRegPhone(""); setRegServices([]); setRegAvatar(null);
+    setPassword(""); setRegFirstName(""); setRegLastName(""); setRegEmail(""); setRegPhone(""); setRegPhonePrefix("+39"); setRegServices([]); setRegAvatar(null);
     setRegStep(1);
     setLoading(false);
   };
@@ -4467,7 +4469,7 @@ export default function Home() {
     setLoading(true);
     const res = await completeGoogleRegistration(
       sessionUser.googleId, sessionUser.email, nickname, regRole,
-      { firstName: regFirstName, lastName: regLastName, phone: regPhone, services: regServices, avatar: regAvatar || undefined }
+      { firstName: regFirstName, lastName: regLastName, phone: regPhone.trim() ? `${regPhonePrefix} ${regPhone.trim()}` : "", services: regServices, avatar: regAvatar || undefined }
     );
     if ((res as any).error) {
       alert((res as any).error);
@@ -4476,7 +4478,7 @@ export default function Home() {
     }
     alert(t(lang, "p_register_success"));
     await signOut({ redirect: false });
-    setNickname(""); setRegFirstName(""); setRegLastName(""); setRegPhone(""); setRegServices([]); setRegAvatar(null);
+    setNickname(""); setRegFirstName(""); setRegLastName(""); setRegPhone(""); setRegPhonePrefix("+39"); setRegServices([]); setRegAvatar(null);
     setRegStep(1);
     setLoading(false);
   };
@@ -4648,7 +4650,15 @@ export default function Home() {
                     <div><label style={label}>{t(lang, "p_first_name")}</label><input style={input} value={regFirstName} onChange={e => setRegFirstName(e.target.value)} placeholder="Mario" /></div>
                     <div><label style={label}>{t(lang, "p_last_name")}</label><input style={input} value={regLastName} onChange={e => setRegLastName(e.target.value)} placeholder="Rossi" /></div>
                   </div>
-                  <div><label style={label}>{t(lang, "p_phone")}</label><input style={input} type="tel" value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="+39 340 ..." /></div>
+                  <div>
+                    <label style={label}>{t(lang, "p_phone")}</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <select style={{ ...sel, width: 110, flexShrink: 0 }} value={regPhonePrefix} onChange={e => setRegPhonePrefix(e.target.value)}>
+                        {COUNTRY_CODES.map(c => <option key={c.code + c.name} value={c.code}>{c.flag} {c.code}</option>)}
+                      </select>
+                      <input style={{ ...input, flex: 1 }} type="tel" value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="340 1234567" />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Servizi */}
@@ -4833,7 +4843,15 @@ export default function Home() {
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div><label style={label}>{t(lang, "p_email_required")}</label><input style={input} type="email" required value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="mario@email.com" /></div>
-                    <div><label style={label}>{t(lang, "p_phone")}</label><input style={input} type="tel" value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="+39 340 ..." /></div>
+                    <div>
+                      <label style={label}>{t(lang, "p_phone")}</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <select style={{ ...sel, width: 100, flexShrink: 0 }} value={regPhonePrefix} onChange={e => setRegPhonePrefix(e.target.value)}>
+                          {COUNTRY_CODES.map(c => <option key={c.code + c.name} value={c.code}>{c.flag} {c.code}</option>)}
+                        </select>
+                        <input style={{ ...input, flex: 1, minWidth: 0 }} type="tel" value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="340 1234567" />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
