@@ -281,6 +281,68 @@ function CarFieldsForm({ value, onChange, lang }: { value: CarFieldsValue; onCha
   );
 }
 
+// Suggerimenti indirizzo via Nominatim (OpenStreetMap, nessuna chiave API),
+// limitati al riquadro geografico di Ibiza per evitare risultati fuori zona.
+const IBIZA_VIEWBOX = "1.15,39.15,1.65,38.85";
+function AddressAutocomplete({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [suggestions, setSuggestions] = useState<{ label: string }[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const search = (query: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (query.trim().length < 3) { setSuggestions([]); setOpen(false); return; }
+    debounceRef.current = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setLoading(true);
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&viewbox=${IBIZA_VIEWBOX}&bounded=1`;
+        const res = await fetch(url, { signal: controller.signal });
+        const data = await res.json();
+        setSuggestions((data || []).map((d: any) => ({ label: d.display_name })));
+        setOpen(true);
+      } catch (_e) { /* richiesta annullata o rete assente: nessun suggerimento, non bloccante */ }
+      setLoading(false);
+    }, 400);
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }` }} />
+      <input
+        style={input}
+        value={value}
+        onChange={e => { onChange(e.target.value); search(e.target.value); }}
+        onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={placeholder}
+        autoComplete="off"
+      />
+      {loading && (
+        <div style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)" }}>
+          <div style={{ width: 14, height: 14, borderRadius: "50%", border: `2px solid ${C.border}`, borderTopColor: C.gold, animation: "spin 0.8s linear infinite" }} />
+        </div>
+      )}
+      {open && suggestions.length > 0 && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 20, background: C.surfaceAlt, border: `1px solid ${C.borderGold}`, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", overflow: "hidden" }}>
+          {suggestions.map((s, i) => (
+            <div key={i}
+              onMouseDown={() => { onChange(s.label); setOpen(false); }}
+              style={{ padding: "9px 14px", fontSize: 12, color: C.text, cursor: "pointer", borderBottom: i < suggestions.length - 1 ? `1px solid ${C.border}` : "none" }}
+              onMouseEnter={e => (e.currentTarget.style.background = C.goldGlow)}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >{s.label}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const statusMap = (lang: Lang): Record<string, { label: string; color: string }> => ({
   draft: { label: t(lang, "p_status_draft"), color: C.textDim },
   sent: { label: t(lang, "p_status_sent"), color: C.info },
@@ -3578,9 +3640,11 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
   const [naCarFields, setNaCarFields] = useState<CarFieldsValue>(emptyCarFields);
   const [naImages, setNaImages] = useState<string[]>([]);
   const [naPdf, setNaPdf] = useState<{ base64: string; name: string } | null>(null);
+  const [naPricingMode, setNaPricingMode] = useState<"seasonal" | "monthly">("seasonal");
   const [naPriceLow, setNaPriceLow] = useState("");
   const [naPriceMid, setNaPriceMid] = useState("");
   const [naPriceHigh, setNaPriceHigh] = useState("");
+  const [naMonthlyPrices, setNaMonthlyPrices] = useState<string[]>(Array(12).fill(""));
   const [naCleaningFee, setNaCleaningFee] = useState("0");
   const [naSubmitting, setNaSubmitting] = useState(false);
 
@@ -3640,7 +3704,9 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
         for (let i = 0; i < 12; i++) {
           const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
           const mm = d.getMonth() + 1;
-          const price = (mm === 7 || mm === 8) ? high : (mm === 6 || mm === 9) ? mid : low;
+          const price = naPricingMode === "monthly"
+            ? (parseFloat(naMonthlyPrices[i] || "0") || 0)
+            : (mm === 7 || mm === 8) ? high : (mm === 6 || mm === 9) ? mid : low;
           monthly.push({ month: `${d.getFullYear()}-${String(mm).padStart(2, "0")}`, basePrice: price, cleaningFee: cleaning });
         }
         await bulkSetRoomPricing(roomId, monthly);
@@ -3651,7 +3717,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
       if (naConciergeNick.trim()) await addCollaboration(propId, naConciergeNick.trim());
 
       setNaName(""); setNaLoc(""); setNaDesc(""); setNaImages([]); setNaPdf(null);
-      setNaPriceLow(""); setNaPriceMid(""); setNaPriceHigh(""); setNaCleaningFee("0");
+      setNaPriceLow(""); setNaPriceMid(""); setNaPriceHigh(""); setNaMonthlyPrices(Array(12).fill("")); setNaCleaningFee("0");
       setNaConciergeNick(""); setNaOwnerId(""); setNaNewNick(""); setNaCarFields(emptyCarFields);
       setMsg(t(lang, "p_ad_asset_created"));
       refresh();
@@ -4043,7 +4109,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
               <h3 style={{ ...h3Style, marginTop: 24 }}>{t(lang, "p_ad_asset_data")}</h3>
               <div style={grid(2)}>
                 <div><label style={label}>{t(lang, "p_od_name")}</label><input style={input} value={naName} onChange={e => setNaName(e.target.value)} placeholder="es. Villa Roca" /></div>
-                <div><label style={label}>{t(lang, "p_od_location_ph_label")}</label><input style={input} value={naLoc} onChange={e => setNaLoc(e.target.value)} placeholder="Città, Zona, Porto" /></div>
+                <div><label style={label}>{t(lang, "p_od_location_ph_label")}</label><AddressAutocomplete value={naLoc} onChange={setNaLoc} placeholder="Città, Zona, Porto" /></div>
               </div>
               <div style={{ ...grid(2), marginTop: 12 }}>
                 <div>
@@ -4069,14 +4135,34 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
               </div>
 
               <h3 style={{ ...h3Style, marginTop: 24 }}>{t(lang, "p_ad_seasonal_prices", { unit: unitSuffix(lang, naAssetType).replace("/", "") })}</h3>
-              <div style={grid(2)}>
-                <div><label style={label}>{t(lang, "p_ad_low_season")}</label><input style={input} type="number" value={naPriceLow} onChange={e => setNaPriceLow(e.target.value)} /></div>
-                <div><label style={label}>{t(lang, "p_ad_mid_season")}</label><input style={input} type="number" value={naPriceMid} onChange={e => setNaPriceMid(e.target.value)} placeholder={t(lang, "p_ad_default_low")} /></div>
-                <div><label style={label}>{t(lang, "p_ad_high_season")}</label><input style={input} type="number" value={naPriceHigh} onChange={e => setNaPriceHigh(e.target.value)} placeholder={t(lang, "p_ad_default_low")} /></div>
-                {!isVehicleAsset(naAssetType) && (
-                  <div><label style={label}>{t(lang, "p_ad_cleaning_fee_eur")}</label><input style={input} type="number" value={naCleaningFee} onChange={e => setNaCleaningFee(e.target.value)} /></div>
-                )}
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                <button type="button" onClick={() => setNaPricingMode("seasonal")} style={{ ...btn(naPricingMode === "seasonal" ? "gold" : "outline"), padding: "6px 16px", fontSize: 11 }}>{t(lang, "p_ad_pricing_seasonal")}</button>
+                <button type="button" onClick={() => setNaPricingMode("monthly")} style={{ ...btn(naPricingMode === "monthly" ? "gold" : "outline"), padding: "6px 16px", fontSize: 11 }}>{t(lang, "p_ad_pricing_monthly")}</button>
               </div>
+              {naPricingMode === "seasonal" ? (
+                <div style={grid(2)}>
+                  <div><label style={label}>{t(lang, "p_ad_low_season")}</label><input style={input} type="number" value={naPriceLow} onChange={e => setNaPriceLow(e.target.value)} /></div>
+                  <div><label style={label}>{t(lang, "p_ad_mid_season")}</label><input style={input} type="number" value={naPriceMid} onChange={e => setNaPriceMid(e.target.value)} placeholder={t(lang, "p_ad_default_low")} /></div>
+                  <div><label style={label}>{t(lang, "p_ad_high_season")}</label><input style={input} type="number" value={naPriceHigh} onChange={e => setNaPriceHigh(e.target.value)} placeholder={t(lang, "p_ad_default_low")} /></div>
+                </div>
+              ) : (
+                <div style={grid(3)}>
+                  {Array.from({ length: 12 }, (_, i) => {
+                    const now = new Date();
+                    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+                    const monthLabel = `${monthNames(lang)[d.getMonth()]} ${d.getFullYear()}`;
+                    return (
+                      <div key={i}>
+                        <label style={label}>{monthLabel}</label>
+                        <input style={input} type="number" value={naMonthlyPrices[i]} onChange={e => setNaMonthlyPrices(prev => { const next = [...prev]; next[i] = e.target.value; return next; })} placeholder="0" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {!isVehicleAsset(naAssetType) && (
+                <div style={{ marginTop: 14 }}><label style={label}>{t(lang, "p_ad_cleaning_fee_eur")}</label><input style={input} type="number" value={naCleaningFee} onChange={e => setNaCleaningFee(e.target.value)} /></div>
+              )}
 
               <h3 style={{ ...h3Style, marginTop: 24 }}>{t(lang, "p_ad_photos")}</h3>
               <label style={{ ...btn("outline"), padding: "8px 16px", fontSize: 11, cursor: "pointer", display: "inline-block" }}>
