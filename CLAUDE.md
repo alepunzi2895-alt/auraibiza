@@ -2,14 +2,6 @@
 
 Piattaforma Next.js 14 per la gestione di prenotazioni, proprietà e asset di lusso a Ibiza. Sistema multi-ruolo (admin, owner, concierge, agent) con DB Turso (LibSQL) e deploy su Vercel.
 
-## Comandi essenziali
-
-```bash
-npm run dev      # dev server su http://localhost:3000
-npm run build    # build produzione (verifica TypeScript)
-npm run lint     # linting TypeScript/ESLint
-```
-
 ## Variabili d'ambiente
 
 File `.env.local` (escluso da git — aggiungere anche su Vercel dashboard):
@@ -28,54 +20,9 @@ Il client Turso è in [src/lib/db.ts](src/lib/db.ts) con inizializzazione lazy v
 
 ## Architettura
 
-```
-src/
-  app/
-    layout.tsx       # metadata "Aura Ibiza", font Cormorant Garamond + DM Sans
-    page.tsx         # Server Component: fetch listing + rendering home
-    LandingPageClient.tsx  # home pubblica (client) — grid asset, dettaglio, calendario
-    globals.css      # stili globali minimali
-    actions.ts       # Server Actions ("use server") — tutta la logica DB
-    api/auth/[...nextauth]/route.ts  # unica API route: handler NextAuth (Google + credentials)
-    platform/
-      layout.tsx     # server component: legge la sessione (getServerSession) e monta SessionProvider
-      page.tsx        # SPA gestionale client-side (Home, dashboard, ecc.)
-      SessionProviderWrapper.tsx  # wrapper client di next-auth/react SessionProvider
-  lib/
-    db.ts            # client Turso lazy (Proxy pattern)
-    auth.ts          # NextAuthOptions: provider Google + Credentials, callback di collegamento account
-  types/
-    next-auth.d.ts   # estende i tipi Session/JWT con i campi custom (role, status, avatar, ecc.)
-```
-
 Tutto il server-side passa da `actions.ts`, **tranne l'autenticazione**: `api/auth/[...nextauth]/route.ts` è l'unica API route separata, richiesta strutturalmente da NextAuth per il callback OAuth di Google (CSRF, redirect, scambio token). Vedi sezione "Autenticazione" sotto.
 
-## Componenti principali (page.tsx)
-
-| Componente          | Riga circa | Descrizione                                               |
-|---------------------|------------|-----------------------------------------------------------|
-| `LogoFull`          | ~190       | Logo + wordmark Aura Ibiza                                |
-| `CalendarView`      | ~205       | Calendario disponibilità con manager/booking mode         |
-| `PdfPreview`        | ~375       | Anteprima preventivo stampabile A4 (2 pagine)             |
-| `AssetCategoryTabs` | ~570       | Tab Residenze / Marine / Mobilità con contatori           |
-| `ConciergeDashboard`| ~600       | Dashboard concierge/agent                                 |
-| `OwnerDashboard`    | ~1260      | Dashboard owner con gestione proprietà e prenotazioni     |
-| `AdminDashboard`    | ~2650      | Dashboard admin — visibilità totale                       |
-| `Home`              | ~3080      | Entry point: login, registrazione multi-step, routing     |
-| `HelperBot`         | ~3300      | Chat bot di supporto contestuale per ruolo                |
-
-## Design system (design token in page.tsx riga ~85)
-
-```typescript
-C = {
-  bg: "#080B0F", surface: "#10141C", surfaceAlt: "#161C28",
-  gold: "#C8A96E", goldLight: "#E8D5A8", goldDark: "#8A6A30",
-  goldGlow: "rgba(200,169,110,0.12)", borderGold: "rgba(200,169,110,0.25)",
-  ...
-}
-FONT = Cormorant Garamond (serif, titoli)
-FONT_B = DM Sans (sans-serif, corpo)
-```
+## Design system
 
 Stile chiave: dark luxury, glassmorphism (`cardGlass`), gold accent, border-radius 12px.
 
@@ -142,14 +89,6 @@ Nuovo utente (via nickname/password o via Google) → `status: 'pending'` → ad
 
 ## Separazione asset (ASSET_CATEGORIES)
 
-```typescript
-[
-  { key: "residenze", types: ["apartment", "villa"] },
-  { key: "marine",    types: ["boat"] },
-  { key: "mobilita",  types: ["car", "scooter"] },
-]
-```
-
 Componente `AssetCategoryTabs` usato sia nel ConciergeDashboard (filtro camere nel calendario) che in OwnerDashboard (filtro proprietà). Cambiare tab aggiorna automaticamente la room selezionata.
 
 ## Prezzi e commissioni
@@ -168,11 +107,7 @@ Storiate come array JSON di stringhe base64 in Turso (sia properties che rooms).
 
 ## Deploy
 
-- **Hosting**: Vercel (auto-deploy su push a `main` su GitHub `alepunzi2895-alt/auraibiza`)
-- **DB**: Turso eu-west-1
-- **Env vars Vercel**: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL` (= `https://auraibiza.com` in Production), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- **Google OAuth**: redirect URI autorizzato su Google Cloud Console: `https://auraibiza.com/api/auth/callback/google` (+ `http://localhost:3000/api/auth/callback/google` per lo sviluppo locale). Il login Google **non funziona sui deploy Preview di Vercel** (URL effimero non in whitelist) — va testato solo su `localhost` o produzione.
-- **Seed automatico**: al primo avvio se DB vuoto — crea utenti demo + proprietà + pricing
+Vercel + Turso eu-west-1. Runbook completo (env vars, redirect URI Google, limiti Preview) nella skill `deploy-auraibiza`.
 
 ## Account default (seed)
 
