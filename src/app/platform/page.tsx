@@ -25,7 +25,7 @@ import {
   addAgentToConcierge, removeAgentFromConcierge, updateAgentCommissionRate,
   setRoomIcalUrl, syncRoomIcal, getPropertyGallery,
 } from "../actions";
-import { LANGUAGES, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, isDayBasedAsset, type Lang } from "@/lib/i18n";
+import { LANGUAGES, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, isDayBasedAsset, isVehicleAsset, type Lang } from "@/lib/i18n";
 import { COUNTRY_CODES } from "@/lib/countryCodes";
 
 const IBIZA_CENTER: [number, number] = [38.9067, 1.4206];
@@ -226,6 +226,60 @@ const navItem = (active: boolean): CSSProperties => ({
 const th: CSSProperties = { textAlign: "left", padding: "11px 14px", borderBottom: `1px solid ${C.border}`, color: C.textMuted, fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1.2px" };
 const td: CSSProperties = { padding: "11px 14px", borderBottom: `1px solid rgba(30,36,51,0.5)` };
 const sel: CSSProperties = { ...input, appearance: "none" as const };
+
+// --- Campi specifici auto/scooter (riusati in Add Room ed Edit Room, Owner e Admin) ---
+interface CarFieldsValue {
+  carModel: string; carCategory: string; airportDelivery: boolean;
+  securityDeposit: string; kaskoIncluded: boolean; deductibleAmount: string; documentsRequired: string;
+}
+const emptyCarFields: CarFieldsValue = {
+  carModel: "", carCategory: "compact", airportDelivery: false,
+  securityDeposit: "", kaskoIncluded: false, deductibleAmount: "", documentsRequired: "",
+};
+function CarFieldsForm({ value, onChange, lang }: { value: CarFieldsValue; onChange: (v: CarFieldsValue) => void; lang: Lang }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16, padding: 14, background: "rgba(200,169,110,0.04)", border: `1px solid ${C.border}`, borderRadius: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div>
+          <label style={label}>{t(lang, "p_od_car_model_label")}</label>
+          <input style={input} value={value.carModel} onChange={e => onChange({ ...value, carModel: e.target.value })} placeholder={t(lang, "p_od_car_model_ph")} />
+        </div>
+        <div>
+          <label style={label}>{t(lang, "p_od_car_category_label")}</label>
+          <select style={sel} value={value.carCategory} onChange={e => onChange({ ...value, carCategory: e.target.value })}>
+            <option value="compact">{t(lang, "car_category_compact")}</option>
+            <option value="midsize">{t(lang, "car_category_midsize")}</option>
+            <option value="luxury">{t(lang, "car_category_luxury")}</option>
+          </select>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div>
+          <label style={label}>{t(lang, "p_od_security_deposit_label")}</label>
+          <input style={input} type="number" min="0" value={value.securityDeposit} onChange={e => onChange({ ...value, securityDeposit: e.target.value })} placeholder="0" />
+        </div>
+        <div>
+          <label style={label}>{t(lang, "p_od_deductible_label")}</label>
+          <input style={input} type="number" min="0" value={value.deductibleAmount} onChange={e => onChange({ ...value, deductibleAmount: e.target.value })} placeholder="0" />
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 20 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.text, cursor: "pointer" }}>
+          <input type="checkbox" checked={value.airportDelivery} onChange={e => onChange({ ...value, airportDelivery: e.target.checked })} style={{ accentColor: C.gold, width: 14, height: 14 }} />
+          {t(lang, "p_od_airport_delivery_label")}
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.text, cursor: "pointer" }}>
+          <input type="checkbox" checked={value.kaskoIncluded} onChange={e => onChange({ ...value, kaskoIncluded: e.target.checked })} style={{ accentColor: C.gold, width: 14, height: 14 }} />
+          {t(lang, "p_od_kasko_label")}
+        </label>
+      </div>
+      <div>
+        <label style={label}>{t(lang, "p_od_documents_required_label")}</label>
+        <textarea style={{ ...input, minHeight: 60, resize: "vertical" }} value={value.documentsRequired} onChange={e => onChange({ ...value, documentsRequired: e.target.value })} placeholder={t(lang, "p_od_documents_required_ph")} />
+      </div>
+    </div>
+  );
+}
 
 const statusMap = (lang: Lang): Record<string, { label: string; color: string }> => ({
   draft: { label: t(lang, "p_status_draft"), color: C.textDim },
@@ -672,6 +726,8 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
   const [clientName, setClientName] = useState("");
   const [clientSurname, setClientSurname] = useState("");
   const [notes, setNotes] = useState("");
+  const [pickupTime, setPickupTime] = useState("");
+  const [dropoffTime, setDropoffTime] = useState("");
   const [guestsCount, setGuestsCount] = useState("1");
   const [conciergeFee, setConciergeFee] = useState("0");
   const [agentFeeVal, setAgentFeeVal] = useState("0");
@@ -745,6 +801,12 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
     const d = new Date();
     return `${d.getFullYear()}-12-31`;
   });
+  const selectedRoomAssetType = useMemo(() => {
+    const room = data.rooms.find((r: any) => r.id === selectedRoom);
+    const prop = [...(data.properties || []), ...(data.collaboratedProperties || [])].find((p: any) => p.id === room?.property_id);
+    return prop?.asset_type;
+  }, [selectedRoom, data.rooms, data.properties, data.collaboratedProperties]);
+
   const pricing = useMemo(() => {
     if (!selectedRange?.start || !selectedRange?.end || !selectedRoom) return null;
     const n = getDaysBetween(selectedRange.start, selectedRange.end);
@@ -759,7 +821,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
        const ms = `${r.getFullYear()}-${String(r.getMonth() + 1).padStart(2, '0')}`;
        const pr = data.pricing.find((p: any) => p.room_id === selectedRoom && p.month === ms);
        baseTotal += pr ? pr.base_price : 0;
-       cFee = pr ? pr.cleaning_fee : 0; 
+       cFee = pr ? pr.cleaning_fee : 0;
        r.setDate(r.getDate() + 1);
     }
 
@@ -807,10 +869,12 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
       total_price: totals.totalPrice,
       stay_price_total: pricing.baseTotal, cleaning_fee_total: pricing.cleaningFee,
       guests_count: parseInt(guestsCount) || 1,
-      fee_mode: feeMode, fee_value: Number(conciergeFee) || 0
+      fee_mode: feeMode, fee_value: Number(conciergeFee) || 0,
+      pickup_time: isVehicleAsset(selectedRoomAssetType) ? pickupTime : null,
+      dropoff_time: isVehicleAsset(selectedRoomAssetType) ? dropoffTime : null,
     });
     setMsg(t(lang, "p_cd_booking_created"));
-    setClientName(""); setClientSurname(""); setNotes("");
+    setClientName(""); setClientSurname(""); setNotes(""); setPickupTime(""); setDropoffTime("");
     setSelectedRange({ start: null, end: null });
     refresh();
     setTab("bookings");
@@ -1017,6 +1081,12 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                     {selectedRoom && parseInt(guestsCount) > (currentRoom?.capacity || 0) && <div style={{ fontSize: 10, color: C.warning, marginTop: 4 }}>{t(lang, "p_cd_exceeds_capacity")} ({currentRoom?.capacity})</div>}
                   </div>
                   <div style={{ marginTop: 12 }}><label style={label}>{t(lang, "p_cd_notes")}</label><textarea style={{ ...input, minHeight: 60, resize: "vertical" }} value={notes} onChange={e => setNotes(e.target.value)} placeholder={t(lang, "p_cd_notes_ph")} /></div>
+                  {isVehicleAsset(selectedRoomAssetType) && (
+                    <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+                      <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_pickup_time_label")}</label><input style={input} type="time" value={pickupTime} onChange={e => setPickupTime(e.target.value)} /></div>
+                      <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_dropoff_time_label")}</label><input style={input} type="time" value={dropoffTime} onChange={e => setDropoffTime(e.target.value)} /></div>
+                    </div>
+                  )}
                 </div>
                 {/* Fee fields */}
                 <div style={card}>
@@ -1574,6 +1644,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomCap, setNewRoomCap] = useState("2");
   const [newRoomDesc, setNewRoomDesc] = useState("");
+  const [newRoomCarFields, setNewRoomCarFields] = useState<CarFieldsValue>(emptyCarFields);
   const [newMethodName, setNewMethodName] = useState("");
   const [newPropName, setNewPropName] = useState("");
   const [newPropLoc, setNewPropLoc] = useState("");
@@ -1583,7 +1654,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
   const [newPropLng, setNewPropLng] = useState("");
   const [editPricing, setEditPricing] = useState<{ roomId: string; month: string; basePrice: string; cleaningFee: string } | null>(null);
   const [addPricing, setAddPricing] = useState<{ roomId: string; month: string; basePrice: string; cleaningFee: string } | null>(null);
-  const [editRoom, setEditRoom] = useState<{ id: string; name: string; capacity: string; description: string; bedrooms: string; bathrooms: string } | null>(null);
+  const [editRoom, setEditRoom] = useState<{ id: string; name: string; capacity: string; description: string; bedrooms: string; bathrooms: string; assetType: string; carFields: CarFieldsValue } | null>(null);
   const [editProperty, setEditProperty] = useState<{ id: string; name: string; location: string; description: string; latitude: string; longitude: string } | null>(null);
   const [viewCalendar, setViewCalendar] = useState<string | null>(null);
   const [collaboratorNick, setCollaboratorNick] = useState("");
@@ -1752,6 +1823,8 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
   const [clientName, setClientName] = useState("");
   const [clientSurname, setClientSurname] = useState("");
   const [notes, setNotes] = useState("");
+  const [pickupTime, setPickupTime] = useState("");
+  const [dropoffTime, setDropoffTime] = useState("");
   const [guestsCount, setGuestsCount] = useState("1");
 
   const handleSaveAdjustments = async () => {
@@ -1768,6 +1841,12 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
     setMsg(t(lang, "p_od_adjustments_saved"));
     refresh();
   };
+
+  const selectedRoomAssetType = useMemo(() => {
+    const room = [...allRooms, ...collaboratedRooms].find((r: any) => r.id === selectedRoom);
+    const prop = [...properties, ...collaboratedProperties].find((p: any) => p.id === room?.property_id);
+    return prop?.asset_type;
+  }, [selectedRoom, allRooms, collaboratedRooms, properties, collaboratedProperties]);
 
   const pricing = useMemo(() => {
     if (!selectedRange.start || !selectedRange.end || !selectedRoom) return null;
@@ -1812,11 +1891,13 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
       total_price: ownerPrice + conciergeFeeValue,
       fee_mode: ownerFeeMode,
       fee_value: rawFeeVal,
+      pickup_time: isVehicleAsset(selectedRoomAssetType) ? pickupTime : null,
+      dropoff_time: isVehicleAsset(selectedRoomAssetType) ? dropoffTime : null,
     });
     // Proprietario crea inizialmente una bozza
     setMsg(t(lang, "p_od_booking_draft_registered"));
     setSelectedRange({ start: null, end: null });
-    setClientName(""); setClientSurname(""); setNotes(""); setGuestsCount("1");
+    setClientName(""); setClientSurname(""); setNotes(""); setGuestsCount("1"); setPickupTime(""); setDropoffTime("");
     setTab("bookings");
     refresh();
   };
@@ -1924,14 +2005,35 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
 
   const handleAddRoom = async (propertyId: string) => {
     if (!newRoomName.trim()) { alert(t(lang, "p_od_enter_room_name")); return; }
-    await addRoomWithPricing(propertyId, newRoomName, Number(newRoomCap), newRoomDesc);
-    setNewRoomName(""); setNewRoomCap("2"); setNewRoomDesc(""); setMsg(t(lang, "p_od_room_added"));
+    const prop = data.properties.find((p: any) => p.id === propertyId);
+    const carFields = isVehicleAsset(prop?.asset_type) ? {
+      carModel: newRoomCarFields.carModel, carCategory: newRoomCarFields.carCategory,
+      airportDelivery: newRoomCarFields.airportDelivery,
+      securityDeposit: newRoomCarFields.securityDeposit ? Number(newRoomCarFields.securityDeposit) : undefined,
+      kaskoIncluded: newRoomCarFields.kaskoIncluded,
+      deductibleAmount: newRoomCarFields.deductibleAmount ? Number(newRoomCarFields.deductibleAmount) : undefined,
+      documentsRequired: newRoomCarFields.documentsRequired,
+    } : undefined;
+    await addRoomWithPricing(propertyId, newRoomName, Number(newRoomCap), newRoomDesc, carFields);
+    setNewRoomName(""); setNewRoomCap("2"); setNewRoomDesc(""); setNewRoomCarFields(emptyCarFields); setMsg(t(lang, "p_od_room_added"));
     refresh();
   };
 
   const handleUpdateRoom = async () => {
     if (!editRoom) return;
-    await updateRoomAction(editRoom.id, editRoom.name, Number(editRoom.capacity), editRoom.description, editRoom.bedrooms ? Number(editRoom.bedrooms) : null, editRoom.bathrooms ? Number(editRoom.bathrooms) : null);
+    const isVehicle = isVehicleAsset(editRoom.assetType);
+    await updateRoomAction(editRoom.id, {
+      name: editRoom.name, capacity: Number(editRoom.capacity), description: editRoom.description,
+      bedrooms: !isVehicle && editRoom.bedrooms ? Number(editRoom.bedrooms) : null,
+      bathrooms: !isVehicle && editRoom.bathrooms ? Number(editRoom.bathrooms) : null,
+      carModel: isVehicle ? editRoom.carFields.carModel : null,
+      carCategory: isVehicle ? editRoom.carFields.carCategory : null,
+      airportDelivery: isVehicle ? editRoom.carFields.airportDelivery : false,
+      securityDeposit: isVehicle && editRoom.carFields.securityDeposit ? Number(editRoom.carFields.securityDeposit) : null,
+      kaskoIncluded: isVehicle ? editRoom.carFields.kaskoIncluded : false,
+      deductibleAmount: isVehicle && editRoom.carFields.deductibleAmount ? Number(editRoom.carFields.deductibleAmount) : null,
+      documentsRequired: isVehicle ? editRoom.carFields.documentsRequired : null,
+    });
     setEditRoom(null); setMsg(t(lang, "p_od_room_updated"));
     refresh();
   };
@@ -2083,7 +2185,19 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                                <div style={{ color: C.textMuted, fontSize: 11 }}>{t(lang, "p_od_capacity")}: {room.capacity} {t(lang, "guests")}{room.bedrooms ? ` · ${room.bedrooms} ${t(lang, "bedrooms")}` : ""}{room.bathrooms ? ` · ${room.bathrooms} ${t(lang, "bathrooms")}` : ""}</div>
                             </div>
                             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                               <button style={{ ...btn(), padding: "4px 8px", fontSize: 10 }} onClick={() => setEditRoom({ id: room.id, name: room.name, capacity: String(room.capacity), description: room.description || "", bedrooms: room.bedrooms != null ? String(room.bedrooms) : "", bathrooms: room.bathrooms != null ? String(room.bathrooms) : "" })}>✏️ {t(lang, "p_common_edit")}</button>
+                               <button style={{ ...btn(), padding: "4px 8px", fontSize: 10 }} onClick={() => setEditRoom({
+                                 id: room.id, name: room.name, capacity: String(room.capacity), description: room.description || "",
+                                 bedrooms: room.bedrooms != null ? String(room.bedrooms) : "", bathrooms: room.bathrooms != null ? String(room.bathrooms) : "",
+                                 assetType: prop.asset_type,
+                                 carFields: {
+                                   carModel: room.car_model || "", carCategory: room.car_category || "compact",
+                                   airportDelivery: !!room.airport_delivery,
+                                   securityDeposit: room.security_deposit != null ? String(room.security_deposit) : "",
+                                   kaskoIncluded: !!room.kasko_included,
+                                   deductibleAmount: room.deductible_amount != null ? String(room.deductible_amount) : "",
+                                   documentsRequired: room.documents_required || "",
+                                 },
+                               })}>✏️ {t(lang, "p_common_edit")}</button>
                                <button style={{ ...btn(), padding: "4px 10px", fontSize: 10 }} onClick={() => setViewCalendar(room.id)}>{t(lang, "p_od_calendar_btn")}</button>
                                <button style={{ ...btn(), padding: "4px 8px", fontSize: 13, borderColor: C.danger + "55", color: C.danger }} title={t(lang, "p_od_delete_room_title")} onClick={async () => { if(confirm(t(lang, "p_od_confirm_delete_room", { name: room.name }))) { await deleteRoomAction(room.id); refresh(); } }}>🗑</button>
                             </div>
@@ -2166,6 +2280,9 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                           <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_capacity")}</label><input style={input} type="number" value={newRoomCap} onChange={e => setNewRoomCap(e.target.value)} /></div>
                       </div>
                       <div style={{ marginBottom: 10 }}><label style={label}>{t(lang, "p_od_description")}</label><textarea style={{ ...input, minHeight: 60, fontSize: 12 }} value={newRoomDesc} onChange={e => setNewRoomDesc(e.target.value)} placeholder={t(lang, "p_od_initial_desc_ph")} /></div>
+                      {isVehicleAsset(prop.asset_type) && (
+                        <CarFieldsForm value={newRoomCarFields} onChange={setNewRoomCarFields} lang={lang} />
+                      )}
                       <button style={{ ...btn("gold"), width: "100%" }} onClick={() => handleAddRoom(prop.id)}>{t(lang, "p_od_add_room")}</button>
                     </div>
                   </div>
@@ -2481,6 +2598,12 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
                     </div>
                   </div>
                   <div style={{ marginTop: 12 }}><label style={label}>{t(lang, "p_od_notes_extra")}</label><textarea style={{ ...input, minHeight: 60, resize: "vertical" }} value={notes} onChange={e => setNotes(e.target.value)} placeholder={t(lang, "p_od_notes_extra_ph")} /></div>
+                  {isVehicleAsset(selectedRoomAssetType) && (
+                    <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+                      <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_pickup_time_label")}</label><input style={input} type="time" value={pickupTime} onChange={e => setPickupTime(e.target.value)} /></div>
+                      <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_dropoff_time_label")}</label><input style={input} type="time" value={dropoffTime} onChange={e => setDropoffTime(e.target.value)} /></div>
+                    </div>
+                  )}
                 </div>
                 {pricing && (() => {
                   const ownerTot = pricing.baseTotal + pricing.cleaningFee;
@@ -3025,14 +3148,18 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
 
       {editRoom && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 400, backdropFilter: "blur(5px)" }}>
-          <div style={{ ...card, width: 360 }}>
+          <div style={{ ...card, width: isVehicleAsset(editRoom.assetType) ? 420 : 360, maxHeight: "85vh", overflowY: "auto" }}>
             <h3 style={h3Style}>{t(lang, "p_od_edit_room_title")}</h3>
             <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_name")}</label><input style={input} value={editRoom.name} onChange={e => setEditRoom({ ...editRoom, name: e.target.value })} /></div>
             <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_capacity")}</label><input style={input} type="number" value={editRoom.capacity} onChange={e => setEditRoom({ ...editRoom, capacity: e.target.value })} /></div>
-            <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-              <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_bedrooms_label")}</label><input style={input} type="number" value={editRoom.bedrooms} onChange={e => setEditRoom({ ...editRoom, bedrooms: e.target.value })} /></div>
-              <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_bathrooms_label")}</label><input style={input} type="number" value={editRoom.bathrooms} onChange={e => setEditRoom({ ...editRoom, bathrooms: e.target.value })} /></div>
-            </div>
+            {isVehicleAsset(editRoom.assetType) ? (
+              <CarFieldsForm value={editRoom.carFields} onChange={carFields => setEditRoom({ ...editRoom, carFields })} lang={lang} />
+            ) : (
+              <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+                <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_bedrooms_label")}</label><input style={input} type="number" value={editRoom.bedrooms} onChange={e => setEditRoom({ ...editRoom, bedrooms: e.target.value })} /></div>
+                <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_bathrooms_label")}</label><input style={input} type="number" value={editRoom.bathrooms} onChange={e => setEditRoom({ ...editRoom, bathrooms: e.target.value })} /></div>
+              </div>
+            )}
             <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_description")}</label><textarea style={{ ...input, minHeight: 80, resize: "vertical" }} value={editRoom.description} onChange={e => setEditRoom({ ...editRoom, description: e.target.value })} placeholder={t(lang, "p_od_apartment_desc_ph")} /></div>
             <div style={{ display: "flex", gap: 8 }}>
               <button style={{ ...btn("gold"), flex: 1 }} onClick={handleUpdateRoom}>{t(lang, "p_common_save")}</button>
@@ -3351,7 +3478,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
   const [assetMgmtTab, setAssetMgmtTab] = useState("residenze");
   const [assetSearch, setAssetSearch] = useState("");
   const [editAsset, setEditAsset] = useState<{ id: string; name: string; location: string; description: string; asset_type: string } | null>(null);
-  const [editAssetRoom, setEditAssetRoom] = useState<{ id: string; name: string; capacity: string; description: string; bedrooms: string; bathrooms: string } | null>(null);
+  const [editAssetRoom, setEditAssetRoom] = useState<{ id: string; name: string; capacity: string; description: string; bedrooms: string; bathrooms: string; assetType: string; carFields: CarFieldsValue } | null>(null);
   const [editAssetPricing, setEditAssetPricing] = useState<{ roomId: string; month: string; basePrice: string; cleaningFee: string } | null>(null);
   const allProperties: any[] = data.properties || [];
   const allRoomsForAssets: any[] = data.rooms || [];
@@ -3444,6 +3571,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
   const [naLoc, setNaLoc] = useState("");
   const [naDesc, setNaDesc] = useState("");
   const [naCapacity, setNaCapacity] = useState("2");
+  const [naCarFields, setNaCarFields] = useState<CarFieldsValue>(emptyCarFields);
   const [naImages, setNaImages] = useState<string[]>([]);
   const [naPdf, setNaPdf] = useState<{ base64: string; name: string } | null>(null);
   const [naPriceLow, setNaPriceLow] = useState("");
@@ -3493,7 +3621,15 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
       const propId = await addProperty(ownerId, naName, naLoc, naDesc, naAssetType);
       if (!propId) { alert(t(lang, "p_ad_error_creating_asset")); return; }
 
-      const roomId = await addRoomWithPricing(propId, naName, Number(naCapacity) || 1, naDesc);
+      const naCarFieldsPayload = isVehicleAsset(naAssetType) ? {
+        carModel: naCarFields.carModel, carCategory: naCarFields.carCategory,
+        airportDelivery: naCarFields.airportDelivery,
+        securityDeposit: naCarFields.securityDeposit ? Number(naCarFields.securityDeposit) : undefined,
+        kaskoIncluded: naCarFields.kaskoIncluded,
+        deductibleAmount: naCarFields.deductibleAmount ? Number(naCarFields.deductibleAmount) : undefined,
+        documentsRequired: naCarFields.documentsRequired,
+      } : undefined;
+      const roomId = await addRoomWithPricing(propId, naName, Number(naCapacity) || 1, naDesc, naCarFieldsPayload);
       if (roomId) {
         const now = new Date();
         const monthly: { month: string; basePrice: number; cleaningFee: number }[] = [];
@@ -3512,7 +3648,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 
       setNaName(""); setNaLoc(""); setNaDesc(""); setNaImages([]); setNaPdf(null);
       setNaPriceLow(""); setNaPriceMid(""); setNaPriceHigh(""); setNaCleaningFee("0");
-      setNaConciergeNick(""); setNaOwnerId(""); setNaNewNick("");
+      setNaConciergeNick(""); setNaOwnerId(""); setNaNewNick(""); setNaCarFields(emptyCarFields);
       setMsg(t(lang, "p_ad_asset_created"));
       refresh();
     } finally {
@@ -3755,7 +3891,19 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                               </div>
                               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                 {current && <span style={{ fontSize: 12, color: C.gold }}>€{current.base_price}{unitSuffix(lang, prop.asset_type)}</span>}
-                                <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetRoom({ id: room.id, name: room.name, capacity: String(room.capacity), description: room.description || "", bedrooms: room.bedrooms != null ? String(room.bedrooms) : "", bathrooms: room.bathrooms != null ? String(room.bathrooms) : "" })}>{t(lang, "p_ad_edit_unit_btn")}</button>
+                                <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetRoom({
+                                  id: room.id, name: room.name, capacity: String(room.capacity), description: room.description || "",
+                                  bedrooms: room.bedrooms != null ? String(room.bedrooms) : "", bathrooms: room.bathrooms != null ? String(room.bathrooms) : "",
+                                  assetType: prop.asset_type,
+                                  carFields: {
+                                    carModel: room.car_model || "", carCategory: room.car_category || "compact",
+                                    airportDelivery: !!room.airport_delivery,
+                                    securityDeposit: room.security_deposit != null ? String(room.security_deposit) : "",
+                                    kaskoIncluded: !!room.kasko_included,
+                                    deductibleAmount: room.deductible_amount != null ? String(room.deductible_amount) : "",
+                                    documentsRequired: room.documents_required || "",
+                                  },
+                                })}>{t(lang, "p_ad_edit_unit_btn")}</button>
                                 {current && <button style={{ ...btn(), padding: "3px 10px", fontSize: 10 }} onClick={() => setEditAssetPricing({ roomId: room.id, month: current.month, basePrice: String(current.base_price), cleaningFee: String(current.cleaning_fee) })}>{t(lang, "p_ad_edit_price_btn")}</button>}
                               </div>
                             </div>
@@ -3797,18 +3945,34 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
             {/* Modale modifica unità */}
             {editAssetRoom && (
               <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300 }} onClick={() => setEditAssetRoom(null)}>
-                <div style={{ ...card, width: 400, maxWidth: "92vw" }} onClick={e => e.stopPropagation()}>
+                <div style={{ ...card, width: isVehicleAsset(editAssetRoom.assetType) ? 440 : 400, maxWidth: "92vw", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
                   <h3 style={{ ...h2Style, fontSize: 18, marginBottom: 16 }}>{t(lang, "p_ad_edit_unit_title")}</h3>
                   <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_od_name")}</label><input style={input} value={editAssetRoom.name} onChange={e => setEditAssetRoom({ ...editAssetRoom, name: e.target.value })} /></div>
                   <div style={{ marginBottom: 12 }}><label style={label}>{t(lang, "p_ad_capacity_guests_label")}</label><input style={input} type="number" value={editAssetRoom.capacity} onChange={e => setEditAssetRoom({ ...editAssetRoom, capacity: e.target.value })} /></div>
-                  <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-                    <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_bedrooms_label")}</label><input style={input} type="number" value={editAssetRoom.bedrooms} onChange={e => setEditAssetRoom({ ...editAssetRoom, bedrooms: e.target.value })} /></div>
-                    <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_bathrooms_label")}</label><input style={input} type="number" value={editAssetRoom.bathrooms} onChange={e => setEditAssetRoom({ ...editAssetRoom, bathrooms: e.target.value })} /></div>
-                  </div>
+                  {isVehicleAsset(editAssetRoom.assetType) ? (
+                    <CarFieldsForm value={editAssetRoom.carFields} onChange={carFields => setEditAssetRoom({ ...editAssetRoom, carFields })} lang={lang} />
+                  ) : (
+                    <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+                      <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_bedrooms_label")}</label><input style={input} type="number" value={editAssetRoom.bedrooms} onChange={e => setEditAssetRoom({ ...editAssetRoom, bedrooms: e.target.value })} /></div>
+                      <div style={{ flex: 1 }}><label style={label}>{t(lang, "p_od_bathrooms_label")}</label><input style={input} type="number" value={editAssetRoom.bathrooms} onChange={e => setEditAssetRoom({ ...editAssetRoom, bathrooms: e.target.value })} /></div>
+                    </div>
+                  )}
                   <div style={{ marginBottom: 16 }}><label style={label}>{t(lang, "p_od_description")}</label><textarea style={{ ...input, minHeight: 80 }} value={editAssetRoom.description} onChange={e => setEditAssetRoom({ ...editAssetRoom, description: e.target.value })} /></div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
-                      await updateRoomAction(editAssetRoom.id, editAssetRoom.name, Number(editAssetRoom.capacity), editAssetRoom.description, editAssetRoom.bedrooms ? Number(editAssetRoom.bedrooms) : null, editAssetRoom.bathrooms ? Number(editAssetRoom.bathrooms) : null);
+                      const isVehicle = isVehicleAsset(editAssetRoom.assetType);
+                      await updateRoomAction(editAssetRoom.id, {
+                        name: editAssetRoom.name, capacity: Number(editAssetRoom.capacity), description: editAssetRoom.description,
+                        bedrooms: !isVehicle && editAssetRoom.bedrooms ? Number(editAssetRoom.bedrooms) : null,
+                        bathrooms: !isVehicle && editAssetRoom.bathrooms ? Number(editAssetRoom.bathrooms) : null,
+                        carModel: isVehicle ? editAssetRoom.carFields.carModel : null,
+                        carCategory: isVehicle ? editAssetRoom.carFields.carCategory : null,
+                        airportDelivery: isVehicle ? editAssetRoom.carFields.airportDelivery : false,
+                        securityDeposit: isVehicle && editAssetRoom.carFields.securityDeposit ? Number(editAssetRoom.carFields.securityDeposit) : null,
+                        kaskoIncluded: isVehicle ? editAssetRoom.carFields.kaskoIncluded : false,
+                        deductibleAmount: isVehicle && editAssetRoom.carFields.deductibleAmount ? Number(editAssetRoom.carFields.deductibleAmount) : null,
+                        documentsRequired: isVehicle ? editAssetRoom.carFields.documentsRequired : null,
+                      });
                       setEditAssetRoom(null); setMsg(t(lang, "p_ad_unit_updated")); refresh();
                     }}>{t(lang, "p_common_save")}</button>
                     <button style={{ ...btn(), flex: 1 }} onClick={() => setEditAssetRoom(null)}>{t(lang, "p_common_cancel")}</button>
@@ -3888,6 +4052,11 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
                 <label style={label}>{t(lang, "p_od_description")}</label>
                 <textarea style={{ ...input, minHeight: 80, fontSize: 12 }} value={naDesc} onChange={e => setNaDesc(e.target.value)} placeholder={t(lang, "p_ad_brief_desc_ph")} />
               </div>
+              {isVehicleAsset(naAssetType) && (
+                <div style={{ marginTop: 12 }}>
+                  <CarFieldsForm value={naCarFields} onChange={setNaCarFields} lang={lang} />
+                </div>
+              )}
               <div style={{ marginTop: 12 }}>
                 <label style={label}>{t(lang, "p_ad_concierge_collab_optional")}</label>
                 <input style={input} value={naConciergeNick} onChange={e => setNaConciergeNick(e.target.value)} placeholder={t(lang, "p_ad_concierge_nick_ph")} />

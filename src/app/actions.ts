@@ -70,7 +70,7 @@ export async function initDatabase() {
     // nuove migrazioni non verranno mai eseguite (il check corto-circuita
     // prima di arrivarci).
     try {
-      const check = await db.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_users_google_id'");
+      const check = await db.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_rooms_car_category'");
       if (check.rows.length > 0) {
         dbReady = true;
         return { success: true };
@@ -141,6 +141,15 @@ export async function initDatabase() {
       "ALTER TABLE properties ADD COLUMN description_i18n TEXT",
       "ALTER TABLE properties ADD COLUMN thumbnail TEXT",
       "ALTER TABLE users ADD COLUMN google_id TEXT",
+      "ALTER TABLE rooms ADD COLUMN car_model TEXT",
+      "ALTER TABLE rooms ADD COLUMN car_category TEXT",
+      "ALTER TABLE rooms ADD COLUMN airport_delivery INTEGER DEFAULT 0",
+      "ALTER TABLE rooms ADD COLUMN security_deposit REAL",
+      "ALTER TABLE rooms ADD COLUMN kasko_included INTEGER DEFAULT 0",
+      "ALTER TABLE rooms ADD COLUMN deductible_amount REAL",
+      "ALTER TABLE rooms ADD COLUMN documents_required TEXT",
+      "ALTER TABLE bookings ADD COLUMN pickup_time TEXT",
+      "ALTER TABLE bookings ADD COLUMN dropoff_time TEXT",
     ];
     // `dbReady` è un flag in memoria: si azzera ad ogni cold start serverless,
     // quindi queste migrazioni (quasi sempre no-op, la colonna esiste già) si
@@ -158,6 +167,7 @@ export async function initDatabase() {
       "CREATE INDEX IF NOT EXISTS idx_rooms_property_id ON rooms(property_id)",
       "CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)",
       "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
+      "CREATE INDEX IF NOT EXISTS idx_rooms_car_category ON rooms(car_category)",
     ];
     await Promise.allSettled(indexes.map(sql => db.execute(sql)));
 
@@ -433,8 +443,8 @@ export async function createBooking(data: any) {
     const totalPrice = (data.owner_price_total || 0) + (data.concierge_fee || 0) + agentFee;
 
     await db.execute({
-      sql: "INSERT INTO bookings (id, room_id, concierge_id, client_name, client_surname, start_date, end_date, notes, owner_price_total, concierge_fee, total_price, status, stay_price_total, cleaning_fee_total, guests_count, fee_mode, fee_value, asset_type, platform_fee, platform_fee_rate, agent_fee, agent_id, concierge_commission_on_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      args: [id, data.room_id, data.concierge_id, data.client_name, data.client_surname || "", data.start_date, data.end_date, data.notes || "", data.owner_price_total, data.concierge_fee, totalPrice, "draft", data.stay_price_total || 0, data.cleaning_fee_total || 0, data.guests_count || 1, data.fee_mode || 'per_night', data.fee_value || 0, data.asset_type || 'apartment', platformFee, platformFeeRate, agentFee, agentId, conciergeCommissionOnAgent, Date.now()],
+      sql: "INSERT INTO bookings (id, room_id, concierge_id, client_name, client_surname, start_date, end_date, notes, owner_price_total, concierge_fee, total_price, status, stay_price_total, cleaning_fee_total, guests_count, fee_mode, fee_value, asset_type, platform_fee, platform_fee_rate, agent_fee, agent_id, concierge_commission_on_agent, pickup_time, dropoff_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      args: [id, data.room_id, data.concierge_id, data.client_name, data.client_surname || "", data.start_date, data.end_date, data.notes || "", data.owner_price_total, data.concierge_fee, totalPrice, "draft", data.stay_price_total || 0, data.cleaning_fee_total || 0, data.guests_count || 1, data.fee_mode || 'per_night', data.fee_value || 0, data.asset_type || 'apartment', platformFee, platformFeeRate, agentFee, agentId, conciergeCommissionOnAgent, data.pickup_time || null, data.dropoff_time || null, Date.now()],
     });
     revalidatePath("/");
     return { id };
@@ -586,10 +596,26 @@ export async function getPropertyPdf(id: string) {
   } catch (error) { return { pdf_document: null, pdf_name: null, error: String(error) }; }
 }
 
-export async function addRoomWithPricing(propertyId: string, name: string, capacity: number, description: string) {
+export async function addRoomWithPricing(propertyId: string, name: string, capacity: number, description: string, carFields?: {
+  carModel?: string; carCategory?: string; airportDelivery?: boolean;
+  securityDeposit?: number; kaskoIncluded?: boolean; deductibleAmount?: number; documentsRequired?: string;
+}) {
   try {
     const roomId = `r${uid()}`;
-    await db.execute({ sql: "INSERT INTO rooms (id, property_id, name, capacity, description) VALUES (?, ?, ?, ?, ?)", args: [roomId, propertyId, name, capacity, description || ""] });
+    if (carFields) {
+      await db.execute({
+        sql: "INSERT INTO rooms (id, property_id, name, capacity, description, car_model, car_category, airport_delivery, security_deposit, kasko_included, deductible_amount, documents_required) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        args: [
+          roomId, propertyId, name, capacity, description || "",
+          carFields.carModel || null, carFields.carCategory || null,
+          carFields.airportDelivery ? 1 : 0, carFields.securityDeposit ?? null,
+          carFields.kaskoIncluded ? 1 : 0, carFields.deductibleAmount ?? null,
+          carFields.documentsRequired || null,
+        ],
+      });
+    } else {
+      await db.execute({ sql: "INSERT INTO rooms (id, property_id, name, capacity, description) VALUES (?, ?, ?, ?, ?)", args: [roomId, propertyId, name, capacity, description || ""] });
+    }
 
     const now = new Date();
     const months: string[] = [];
@@ -615,9 +641,25 @@ export async function addRoomWithPricing(propertyId: string, name: string, capac
   } catch (error) { console.error(error); return ""; }
 }
 
-export async function updateRoomAction(roomId: string, name: string, capacity: number, description: string, bedrooms?: number | null, bathrooms?: number | null) {
+export async function updateRoomAction(roomId: string, fields: {
+  name: string; capacity: number; description: string;
+  bedrooms?: number | null; bathrooms?: number | null;
+  carModel?: string | null; carCategory?: string | null; airportDelivery?: boolean;
+  securityDeposit?: number | null; kaskoIncluded?: boolean;
+  deductibleAmount?: number | null; documentsRequired?: string | null;
+}) {
   try {
-    await db.execute({ sql: "UPDATE rooms SET name = ?, capacity = ?, description = ?, bedrooms = ?, bathrooms = ? WHERE id = ?", args: [name, capacity, description || "", bedrooms ?? null, bathrooms ?? null, roomId] });
+    await db.execute({
+      sql: "UPDATE rooms SET name = ?, capacity = ?, description = ?, bedrooms = ?, bathrooms = ?, car_model = ?, car_category = ?, airport_delivery = ?, security_deposit = ?, kasko_included = ?, deductible_amount = ?, documents_required = ? WHERE id = ?",
+      args: [
+        fields.name, fields.capacity, fields.description || "",
+        fields.bedrooms ?? null, fields.bathrooms ?? null,
+        fields.carModel ?? null, fields.carCategory ?? null, fields.airportDelivery ? 1 : 0,
+        fields.securityDeposit ?? null, fields.kaskoIncluded ? 1 : 0,
+        fields.deductibleAmount ?? null, fields.documentsRequired ?? null,
+        roomId,
+      ],
+    });
     revalidatePath("/");
     return { success: true };
   } catch (error) { return { success: false, error: String(error) }; }
@@ -1053,7 +1095,7 @@ const getCachedPublicListings = unstable_cache(
     const propertiesSQL = "SELECT id, name, location, description, description_i18n, asset_type, is_public, manages_availability, latitude, longitude, CASE WHEN pdf_document IS NOT NULL THEN 1 ELSE 0 END as has_pdf FROM properties WHERE is_public = 1 ORDER BY name ASC";
     const [properties, rooms, pricing] = await Promise.all([
       db.execute(propertiesSQL),
-      db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms FROM rooms ORDER BY name ASC"),
+      db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms, car_model, car_category, airport_delivery, security_deposit, kasko_included, deductible_amount, documents_required FROM rooms ORDER BY name ASC"),
       db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id"),
     ]);
     return { properties: properties.rows, rooms: rooms.rows, pricing: pricing.rows };
@@ -1119,7 +1161,7 @@ export async function getPublicListings(referralCode?: string) {
     // è quello della più lenta delle tre, non la somma dei tre round-trip.
     const [properties, rooms, pricing] = await Promise.all([
       db.execute(propertiesSQL),
-      db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms FROM rooms ORDER BY name ASC"),
+      db.execute("SELECT id, property_id, name, capacity, description, bedrooms, bathrooms, car_model, car_category, airport_delivery, security_deposit, kasko_included, deductible_amount, documents_required FROM rooms ORDER BY name ASC"),
       db.execute("SELECT room_id, MIN(base_price) as min_price, MAX(base_price) as max_price, MIN(cleaning_fee) as cleaning_fee FROM pricing GROUP BY room_id"),
     ]);
     return {

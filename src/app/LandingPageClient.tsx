@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, CSSProperties } from "react";
 import "leaflet/dist/leaflet.css";
 import { getPublicListings, createBookingRequest, getPublicRoomAvailability, getPropertyPdf, getPropertyGallery, chatBookingAssistant, getPropertyThumbnails, getPropertyCoverImages } from "./actions";
-import { LANGUAGES, Lang, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, assetTypeLabel, localizedDescription } from "@/lib/i18n";
+import { LANGUAGES, Lang, DEFAULT_LANG, t, monthNames, dayAbbrevs, unitLabel, unitSuffix, assetTypeLabel, localizedDescription, isVehicleAsset } from "@/lib/i18n";
 
 // ─── Design tokens (standalone, no import from platform) ─────────────────────
 const C = {
@@ -1138,10 +1138,37 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
                               background: isSelected ? C.goldGlow : "rgba(255,255,255,0.02)",
                               transition: "all 0.2s" }}>
                             <div style={{ fontWeight: 600, color: isSelected ? C.gold : C.text, fontSize: 13 }}>{r.name}</div>
-                            <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
-                              {r.capacity} {t(lang, "guests")}{r.bedrooms ? ` · ${r.bedrooms} ${t(lang, "bedrooms")}` : ""}{r.bathrooms ? ` · ${r.bathrooms} ${t(lang, "bathrooms")}` : ""} {pr ? `· €${pr.min_price}${unitSuffix(lang, prop.asset_type)}` : ""}
-                            </div>
+                            {isVehicleAsset(prop.asset_type) ? (
+                              <div style={{ fontSize: 11, color: C.textDim, marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                <span>{r.capacity} {t(lang, "seats")}{r.car_model ? ` · ${r.car_model}` : ""} {pr ? `· €${pr.min_price}${unitSuffix(lang, prop.asset_type)}` : ""}</span>
+                                {r.car_category && (
+                                  <span style={{ background: "rgba(200,169,110,0.15)", border: `1px solid rgba(200,169,110,0.35)`, borderRadius: 12, padding: "2px 8px", fontSize: 9, color: C.goldLight, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                                    {t(lang, `car_category_${r.car_category}`)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
+                                {r.capacity} {t(lang, "guests")}{r.bedrooms ? ` · ${r.bedrooms} ${t(lang, "bedrooms")}` : ""}{r.bathrooms ? ` · ${r.bathrooms} ${t(lang, "bathrooms")}` : ""} {pr ? `· €${pr.min_price}${unitSuffix(lang, prop.asset_type)}` : ""}
+                              </div>
+                            )}
                             {r.description && <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{r.description}</div>}
+                            {isVehicleAsset(prop.asset_type) && isSelected && (
+                              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }} onClick={e => e.stopPropagation()}>
+                                <div style={{ fontSize: 9, color: C.gold, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 8 }}>{t(lang, "rental_terms_heading")}</div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 11, color: C.textMuted }}>
+                                  {!!r.airport_delivery && (
+                                    <span style={{ display: "inline-flex", alignSelf: "flex-start", alignItems: "center", gap: 6, background: "rgba(61,158,106,0.15)", border: "1px solid rgba(61,158,106,0.35)", borderRadius: 20, padding: "3px 10px", fontSize: 10, color: "#5DD09A", fontWeight: 600 }}>
+                                    ✈ {t(lang, "badge_airport_delivery")}
+                                  </span>
+                                  )}
+                                  {r.security_deposit != null && r.security_deposit !== "" && <span>{t(lang, "rental_terms_deposit")}: €{r.security_deposit}</span>}
+                                  <span>{r.kasko_included ? t(lang, "rental_terms_kasko_included") : t(lang, "rental_terms_kasko_not_included")}</span>
+                                  {r.deductible_amount != null && r.deductible_amount !== "" && <span>{t(lang, "rental_terms_deductible")}: €{r.deductible_amount}</span>}
+                                  {r.documents_required && <span>{t(lang, "rental_terms_documents")}: {r.documents_required}</span>}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
