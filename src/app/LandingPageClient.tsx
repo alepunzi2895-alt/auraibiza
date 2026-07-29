@@ -439,35 +439,24 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
     });
   }, [listings.properties, listings.rooms, activeCat, searchQuery, minGuests, minBedrooms, minBathrooms]);
 
-  // Paginazione: la home carica solo 6 asset alla volta invece di scaricare
-  // le foto di tutto il catalogo ad ogni visita.
-  const ITEMS_PER_PAGE = 6;
-  const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [activeCat, searchQuery, minGuests, minBedrooms, minBathrooms]);
-  const totalPages = Math.max(1, Math.ceil(filteredProperties.length / ITEMS_PER_PAGE));
-  const paginatedProperties = useMemo(
-    () => filteredProperties.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE),
-    [filteredProperties, page]
-  );
-
   // Le thumbnail non arrivano più con la lista: si caricano solo per gli id
-  // effettivamente visibili (pagina corrente in griglia, tutti in vista mappa).
+  // effettivamente visibili.
   const [thumbnails, setThumbnails] = useState<Record<string, string | null>>(initialThumbnails);
   useEffect(() => {
-    const visibleIds = (viewMode === "map" ? filteredProperties : paginatedProperties).map((p: any) => p.id);
+    const visibleIds = filteredProperties.map((p: any) => p.id);
     const missing = visibleIds.filter((id: string) => !(id in thumbnails));
     if (missing.length === 0) return;
     getPropertyThumbnails(missing).then(map => setThumbnails(prev => ({ ...prev, ...map })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, paginatedProperties, filteredProperties]);
+  }, [filteredProperties]);
 
   // Una volta che l'utente resta sulla pagina qualche istante, sostituiamo la
   // thumbnail leggera con la foto in piena qualità — senza rallentare il
-  // primo caricamento. Se l'utente cambia pagina/vista velocemente, il
-  // timer viene annullato e non si scarica nulla per le pagine "di passaggio".
+  // primo caricamento. Se l'utente cambia vista velocemente, il timer viene
+  // annullato e non si scarica nulla per le viste "di passaggio".
   const [highResImages, setHighResImages] = useState<Record<string, string | null>>({});
   useEffect(() => {
-    const visibleIds = (viewMode === "map" ? filteredProperties : paginatedProperties).map((p: any) => p.id);
+    const visibleIds = filteredProperties.map((p: any) => p.id);
     const missing = visibleIds.filter((id: string) => !(id in highResImages));
     if (missing.length === 0) return;
     const timer = setTimeout(() => {
@@ -475,7 +464,7 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
     }, 1200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, paginatedProperties, filteredProperties]);
+  }, [filteredProperties]);
 
   const getDisplayImage = (id: string) => highResImages[id] || thumbnails[id];
 
@@ -797,7 +786,7 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
         ) : (
           <>
           <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
-            {paginatedProperties.map((prop: any) => {
+            {filteredProperties.map((prop: any) => {
               const rooms = getRoomsForProperty(prop.id);
               const coverImg = getDisplayImage(prop.id);
               const isHighRes = !!highResImages[prop.id];
@@ -893,37 +882,6 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
               );
             })}
           </div>
-          {totalPages > 1 && (
-            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 48 }}>
-              <button
-                style={{ ...btn("outline"), padding: "8px 16px", opacity: page === 1 ? 0.35 : 1, cursor: page === 1 ? "default" : "pointer" }}
-                onClick={() => page > 1 && setPage(p => p - 1)}
-                disabled={page === 1}
-              >
-                ◂
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
-                <button
-                  key={n}
-                  onClick={() => setPage(n)}
-                  style={{
-                    width: 36, height: 36, borderRadius: "50%", border: `1px solid ${n === page ? C.gold : C.border}`,
-                    background: n === page ? `linear-gradient(135deg, ${C.goldDark}, ${C.gold})` : "transparent",
-                    color: n === page ? "#080B0F" : C.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  }}
-                >
-                  {n}
-                </button>
-              ))}
-              <button
-                style={{ ...btn("outline"), padding: "8px 16px", opacity: page === totalPages ? 0.35 : 1, cursor: page === totalPages ? "default" : "pointer" }}
-                onClick={() => page < totalPages && setPage(p => p + 1)}
-                disabled={page === totalPages}
-              >
-                ▸
-              </button>
-            </div>
-          )}
           </>
         )}
       </section>
