@@ -17,9 +17,14 @@ File `.env.local` (escluso da git — aggiungere anche su Vercel dashboard):
 ```
 TURSO_DATABASE_URL=libsql://auraibiza-therealmfkk.aws-eu-west-1.turso.io
 TURSO_AUTH_TOKEN=<token jwt>
+NEXTAUTH_SECRET=<stringa random, es. openssl rand -base64 33>
+GOOGLE_CLIENT_ID=<da Google Cloud Console>
+GOOGLE_CLIENT_SECRET=<da Google Cloud Console>
 ```
 
 Il client Turso è in [src/lib/db.ts](src/lib/db.ts) con inizializzazione lazy via Proxy — lancia errore solo al momento della prima query, non al caricamento del modulo.
+
+`NEXTAUTH_URL` va impostata esplicitamente su Vercel (Production) al dominio pubblico (es. `https://auraibiza.com`); in locale non serve, di default punta a `http://localhost:3000`.
 
 ## Architettura
 
@@ -27,14 +32,23 @@ Il client Turso è in [src/lib/db.ts](src/lib/db.ts) con inizializzazione lazy v
 src/
   app/
     layout.tsx       # metadata "Aura Ibiza", font Cormorant Garamond + DM Sans
-    page.tsx         # unica pagina ~3400 righe — SPA completa client-side
+    page.tsx         # Server Component: fetch listing + rendering home
+    LandingPageClient.tsx  # home pubblica (client) — grid asset, dettaglio, calendario
     globals.css      # stili globali minimali
     actions.ts       # Server Actions ("use server") — tutta la logica DB
+    api/auth/[...nextauth]/route.ts  # unica API route: handler NextAuth (Google + credentials)
+    platform/
+      layout.tsx     # server component: legge la sessione (getServerSession) e monta SessionProvider
+      page.tsx        # SPA gestionale client-side (Home, dashboard, ecc.)
+      SessionProviderWrapper.tsx  # wrapper client di next-auth/react SessionProvider
   lib/
     db.ts            # client Turso lazy (Proxy pattern)
+    auth.ts          # NextAuthOptions: provider Google + Credentials, callback di collegamento account
+  types/
+    next-auth.d.ts   # estende i tipi Session/JWT con i campi custom (role, status, avatar, ecc.)
 ```
 
-Nessuna API route separata. Tutto il server-side passa da `actions.ts`.
+Tutto il server-side passa da `actions.ts`, **tranne l'autenticazione**: `api/auth/[...nextauth]/route.ts` è l'unica API route separata, richiesta strutturalmente da NextAuth per il callback OAuth di Google (CSRF, redirect, scambio token). Vedi sezione "Autenticazione" sotto.
 
 ## Componenti principali (page.tsx)
 
@@ -73,7 +87,7 @@ Schema auto-creato da `initDatabase()` in `actions.ts`. Migrazioni `ALTER TABLE`
 
 | Tabella                | Colonne chiave                                                                |
 |------------------------|-------------------------------------------------------------------------------|
-| `users`                | id, nickname, role, password (SHA-256), status, first_name, last_name, email, phone, services (JSON), managed_by, created_at |
+| `users`                | id, nickname, role, password (SHA-256, NULL per utenti Google), status, first_name, last_name, email (obbligatoria in registrazione, controllo unicità applicativo — nessun UNIQUE a DB), phone, services (JSON), managed_by, google_id (NULL se non collegato a Google), created_at |
 | `properties`           | id, owner_id, name, location, description, image (JSON base64[]), asset_type |
 | `rooms`                | id, property_id, name, capacity, image (JSON base64[]), description           |
 | `pricing`              | id, room_id, month (YYYY-MM), base_price, cleaning_fee                        |
@@ -101,13 +115,24 @@ draft → payment_submitted → confirmed_owner → evaso
 
 Accesso controllatoida `getDashboardData(userId, role)` — entry point principale.
 
+## Autenticazione
+
+Due metodi, entrambi passano da NextAuth v4 (`src/lib/auth.ts`), sessione JWT persistente (cookie, sopravvive al refresh) — nessun DB adapter, nessuna tabella NextAuth: tutto contro la tabella `users` esistente.
+
+- **Nickname + password**: `CredentialsProvider` il cui `authorize()` chiama `loginOrRegister()` (`actions.ts`) esattamente come prima. Gli errori (`utente non trovato`, `password errata`, `account pending`) vengono rilanciati come `Error` e arrivano intatti al client via `signIn("credentials", { redirect: false }).error`.
+- **Google**: `GoogleProvider`. Il collegamento account/creazione utente avviene nel callback `signIn` di `src/lib/auth.ts`, per `google_id` prima e per `email` poi (link automatico a un account nickname/password esistente con la stessa email). Un'identità Google mai vista prima non crea subito una riga in `users`: ottiene una sessione "transitoria" (`isNewGoogleUser: true`) che porta alla schermata di completamento profilo in `platform/page.tsx` (ruolo + dati, niente password) — il submit chiama la nuova action `completeGoogleRegistration()`.
+
+In entrambi i casi un utente `status: 'pending'` non ottiene mai una sessione (stesso comportamento di sempre) — per Google, il `signIn` callback reindirizza a `/platform?error=pending`.
+
 ## Registrazione utenti
 
 Flow in 2 step:
-- **Step 1**: selezione ruolo (owner / concierge / agent) con card visive
-- **Step 2**: credenziali (nickname + password) + dati personali (nome, cognome, email, telefono) + servizi selezionabili per tipo ruolo
+- **Step 1**: selezione ruolo (owner / concierge / agent) con card visive, oppure bottone "Continua con Google" (salta lo Step 1 lato UI ma il ruolo va comunque scelto nella schermata di completamento profilo dopo il redirect)
+- **Step 2**: credenziali (nickname + password, entrambi obbligatori) + dati personali (nome, cognome, **email obbligatoria**, telefono) + servizi selezionabili per tipo ruolo. Con Google, lo Step 2 equivalente non ha campi password (l'autenticazione resta sempre Google) ed email precompilata/bloccata dal profilo Google.
 
-Nuovo utente → `status: 'pending'` → admin approva con `approveUser()` → `status: 'active'`.
+Email obbligatoria e controllata per unicità sia in `registerUser()` che in `completeGoogleRegistration()` (stesso stile del controllo unicità nickname già esistente — nessun vincolo `UNIQUE` a DB, SQLite/Turso non permette di aggiungerlo via `ALTER TABLE` senza riscrivere la tabella).
+
+Nuovo utente (via nickname/password o via Google) → `status: 'pending'` → admin approva con `approveUser()` → `status: 'active'`.
 
 ### Servizi selezionabili
 
@@ -145,7 +170,8 @@ Storiate come array JSON di stringhe base64 in Turso (sia properties che rooms).
 
 - **Hosting**: Vercel (auto-deploy su push a `main` su GitHub `alepunzi2895-alt/auraibiza`)
 - **DB**: Turso eu-west-1
-- **Env vars Vercel**: `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`
+- **Env vars Vercel**: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL` (= `https://auraibiza.com` in Production), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- **Google OAuth**: redirect URI autorizzato su Google Cloud Console: `https://auraibiza.com/api/auth/callback/google` (+ `http://localhost:3000/api/auth/callback/google` per lo sviluppo locale). Il login Google **non funziona sui deploy Preview di Vercel** (URL effimero non in whitelist) — va testato solo su `localhost` o produzione.
 - **Seed automatico**: al primo avvio se DB vuoto — crea utenti demo + proprietà + pricing
 
 ## Account default (seed)
@@ -160,7 +186,7 @@ Password non riportata in chiaro nella documentazione.
 
 - Mutazioni DB → Server Actions in `actions.ts` con `revalidatePath("/")`
 - ID generati lato server con `uid()` (base36 8 char), prefissati per tipo (`u`, `p`, `r`, `b`, `pr`, `av`)
-- Password: SHA-256 senza salt — uso interno, non produzione pubblica
+- Password: SHA-256 senza salt — uso interno, non produzione pubblica. `password` è `NULL` per gli utenti che autenticano solo via Google (stesso pattern già usato per gli utenti creati da un admin con `createManagedUser`) — `loginOrRegister()` già gestisce questo caso
 - Query parametrizzate sempre con `{ sql, args }` — no string interpolation
 - Batch write con `db.batch([], "write")` per atomicità
 - Immagini: `compressImage(base64, 1920, 0.7)` prima di salvare in DB

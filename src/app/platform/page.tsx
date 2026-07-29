@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef, CSSProperties } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
 import "leaflet/dist/leaflet.css";
 import {
-  getDashboardData, loginOrRegister, createBooking, updateBookingStatus,
+  getDashboardData, createBooking, updateBookingStatus,
   addProperty, addRoomWithPricing, updatePricingAction, getRoomAvailability,
   initDatabase, resetDatabase, toggleAvailabilityAction, batchUpdateAvailabilityAction,
   updateRoomAction, addCollaboration, removeCollaboration,
   addPricingMonthAction, deleteBookingAction,
-  submitPaymentProposal, confirmPaymentAndBlock, recordFinalBalance, registerUser,
+  submitPaymentProposal, confirmPaymentAndBlock, recordFinalBalance, registerUser, completeGoogleRegistration,
   updateBookingPriceAdjustment, updateRoomImage,
   addPaymentMethod, deletePaymentMethod,
   updatePropertyAction, updatePropertyImage,
@@ -4295,6 +4296,38 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
 }
 
 // --- MAIN APP ---
+function GoogleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 48 48">
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.5 5.4 29.5 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.4-.4-3.5z"/>
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.5 5.4 29.5 3 24 3 16.3 3 9.6 7.3 6.3 14.7z"/>
+      <path fill="#4CAF50" d="M24 45c5.4 0 10.3-1.8 14.1-5.1l-6.5-5.5C29.6 36 26.9 37 24 37c-5.3 0-9.7-3.3-11.3-7.9l-6.5 5c3.3 6.6 10 10.9 17.8 10.9z"/>
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.6l6.5 5.5C40.9 36.4 45 30.9 45 24c0-1.2-.1-2.4-.4-3.5z"/>
+    </svg>
+  );
+}
+
+function GoogleDivider({ lang, onClick }: { lang: Lang; onClick: () => void }) {
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0" }}>
+        <div style={{ flex: 1, height: 1, background: C.border }} />
+        <span style={{ fontSize: 11, color: C.textDim, textTransform: "uppercase", letterSpacing: "1px" }}>{t(lang, "p_or_divider")}</span>
+        <div style={{ flex: 1, height: 1, background: C.border }} />
+      </div>
+      <button type="button" onClick={onClick} style={{
+        width: "100%", padding: "12px 20px", fontSize: 12, letterSpacing: "0.5px",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+        background: "#fff", color: "#3c4043", border: "1px solid #dadce0", borderRadius: 8,
+        cursor: "pointer", fontFamily: FONT_B, fontWeight: 600,
+      }}>
+        <GoogleIcon />
+        {t(lang, "p_continue_with_google")}
+      </button>
+    </div>
+  );
+}
+
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -4308,7 +4341,10 @@ const useIsMobile = () => {
 
 export default function Home() {
   const isMobile = useIsMobile();
-  const [user, setUser] = useState<User | null>(null);
+  const { data: session } = useSession();
+  const sessionUser = session?.user as any;
+  const isNewGoogleUser = !!sessionUser?.isNewGoogleUser;
+  const user = sessionUser && !isNewGoogleUser ? (sessionUser as User) : null;
   const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
   const [isRegister, setIsRegister] = useState(false);
@@ -4338,7 +4374,9 @@ export default function Home() {
   const [regAvatar, setRegAvatar] = useState<string | null>(null);
   const [regStep, setRegStep] = useState<1 | 2>(1);
 
-  // Apri direttamente il form di registrazione se arriva da ?register=1
+  // Apri direttamente il form di registrazione se arriva da ?register=1, o
+  // mostra l'avviso di account in attesa di approvazione se arriva da un
+  // login Google con ?error=pending (redirect impostato in src/lib/auth.ts).
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -4346,8 +4384,30 @@ export default function Home() {
         setIsRegister(true);
         setRegStep(1);
       }
+      const authError = params.get("error");
+      if (authError === "pending") {
+        alert(t(lang, "p_login_pending"));
+        window.history.replaceState({}, "", window.location.pathname);
+      } else if (authError) {
+        alert(t(lang, "p_oauth_error_generic"));
+        window.history.replaceState({}, "", window.location.pathname);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Precompila i dati del profilo Google (nome, avatar) quando arriva una
+  // nuova identità Google non ancora legata a nessun account.
+  useEffect(() => {
+    if (!isNewGoogleUser || !sessionUser) return;
+    if (!regFirstName && !regLastName && sessionUser.name) {
+      const parts = String(sessionUser.name).trim().split(/\s+/);
+      setRegFirstName(parts[0] || "");
+      setRegLastName(parts.slice(1).join(" "));
+    }
+    if (!regAvatar && sessionUser.googlePicture) setRegAvatar(sessionUser.googlePicture);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNewGoogleUser, sessionUser?.googleId]);
 
   const fetchAll = async (silent = false) => {
     if (!dbData && !silent) setLoading(true);
@@ -4371,18 +4431,16 @@ export default function Home() {
   const handleLogin = async () => {
     if (!nickname.trim() || !password.trim()) { alert(t(lang, "p_err_enter_credentials")); return; }
     setLoading(true);
-    const res = await loginOrRegister(nickname, password);
-    if ((res as any).error) {
-      alert((res as any).error);
-      setLoading(false);
-      return;
-    }
-    setUser(res as any);
+    const res = await signIn("credentials", { nickname, password, redirect: false });
     setLoading(false);
+    if (res?.error) alert(res.error);
   };
+
+  const handleGoogleSignIn = () => signIn("google", { callbackUrl: "/platform" });
 
   const handleRegister = async () => {
     if (!nickname.trim() || !password.trim()) { alert(t(lang, "p_err_enter_credentials")); return; }
+    if (!regEmail.trim()) { alert(t(lang, "p_err_email_required")); return; }
     setLoading(true);
     const res = await registerUser(nickname, password, regRole, {
       firstName: regFirstName, lastName: regLastName,
@@ -4397,6 +4455,28 @@ export default function Home() {
     alert(t(lang, "p_register_success"));
     setIsRegister(false);
     setPassword(""); setRegFirstName(""); setRegLastName(""); setRegEmail(""); setRegPhone(""); setRegServices([]); setRegAvatar(null);
+    setRegStep(1);
+    setLoading(false);
+  };
+
+  // Completa la registrazione avviata con "Continua con Google": stessa logica
+  // di handleRegister ma senza password (l'utente autentica sempre via Google)
+  // ed email/identità già verificate da Google.
+  const handleGoogleClaimSubmit = async () => {
+    if (!nickname.trim()) { alert(t(lang, "p_err_enter_credentials")); return; }
+    setLoading(true);
+    const res = await completeGoogleRegistration(
+      sessionUser.googleId, sessionUser.email, nickname, regRole,
+      { firstName: regFirstName, lastName: regLastName, phone: regPhone, services: regServices, avatar: regAvatar || undefined }
+    );
+    if ((res as any).error) {
+      alert((res as any).error);
+      setLoading(false);
+      return;
+    }
+    alert(t(lang, "p_register_success"));
+    await signOut({ redirect: false });
+    setNickname(""); setRegFirstName(""); setRegLastName(""); setRegPhone(""); setRegServices([]); setRegAvatar(null);
     setRegStep(1);
     setLoading(false);
   };
@@ -4420,7 +4500,7 @@ export default function Home() {
     if (!res.success) {
       alert(t(lang, "p_err_reset") + res.error);
     } else {
-      setUser(null);
+      await signOut({ redirect: false });
       await fetchAll();
     }
     setLoading(false);
@@ -4497,7 +4577,7 @@ export default function Home() {
             )}
           </div>
         </div>
-        <div style={{ width: "100%", maxWidth: isRegister ? 520 : 400, textAlign: "center" }}>
+        <div style={{ width: "100%", maxWidth: isRegister || isNewGoogleUser ? 520 : 400, textAlign: "center" }}>
           {/* Logo */}
           <div style={{ marginBottom: 32, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <div style={{ position: "relative", display: "inline-block" }}>
@@ -4512,6 +4592,105 @@ export default function Home() {
 
           <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }` }} />
 
+          {isNewGoogleUser ? (
+            <div style={{ ...cardGlass, textAlign: "left", maxHeight: "85vh", overflowY: "auto" }}>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontFamily: FONT, fontSize: 18, color: C.goldLight }}>{t(lang, "p_complete_profile")}</div>
+                <div style={{ fontSize: 12, color: C.textMuted, marginTop: 6 }}>{t(lang, "p_google_email_locked_hint", { email: sessionUser?.email || "" })}</div>
+              </div>
+
+              <form onSubmit={e => { e.preventDefault(); handleGoogleClaimSubmit(); }}>
+                {/* Avatar (da Google, sostituibile) */}
+                <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 20 }}>
+                  <div style={{
+                    width: 88, height: 88, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+                    border: `2px solid ${C.borderGold}`, background: C.surfaceAlt,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {regAvatar ? <img src={regAvatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ fontSize: 24 }}>📸</div>}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.7 }}>{sessionUser?.email}</div>
+                </div>
+
+                {/* Ruolo */}
+                <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>{t(lang, "p_google_role_prompt")}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                    {([
+                      { key: "owner", icon: "🏠", label: t(lang, "p_role_owner") },
+                      { key: "concierge", icon: "🤵", label: t(lang, "p_role_concierge") },
+                      { key: "agent", icon: "🌐", label: t(lang, "p_role_agent") },
+                    ] as const).map(r => (
+                      <button key={r.key} onClick={() => setRegRole(r.key)} type="button" style={{
+                        padding: "14px 10px", borderRadius: 10, cursor: "pointer", textAlign: "center",
+                        border: regRole === r.key ? `1px solid ${C.borderGold}` : `1px solid ${C.border}`,
+                        background: regRole === r.key ? C.goldGlow : "rgba(255,255,255,0.03)",
+                        color: regRole === r.key ? C.gold : C.textMuted, transition: "all 0.2s",
+                        fontFamily: FONT_B,
+                      }}>
+                        <div style={{ fontSize: 20, marginBottom: 6 }}>{r.icon}</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>{r.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Credenziali (solo nickname: l'autenticazione resta Google) */}
+                <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>{t(lang, "p_login_credentials")}</div>
+                  <div><label style={label}>{t(lang, "p_nickname_required")}</label><input style={input} value={nickname} onChange={e => setNickname(e.target.value)} placeholder={t(lang, "p_nickname_ph2")} autoComplete="username" /></div>
+                </div>
+
+                {/* Dati personali */}
+                <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>{t(lang, "p_personal_data")}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                    <div><label style={label}>{t(lang, "p_first_name")}</label><input style={input} value={regFirstName} onChange={e => setRegFirstName(e.target.value)} placeholder="Mario" /></div>
+                    <div><label style={label}>{t(lang, "p_last_name")}</label><input style={input} value={regLastName} onChange={e => setRegLastName(e.target.value)} placeholder="Rossi" /></div>
+                  </div>
+                  <div><label style={label}>{t(lang, "p_phone")}</label><input style={input} type="tel" value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="+39 340 ..." /></div>
+                </div>
+
+                {/* Servizi */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 4 }}>
+                    {regRole === "owner" ? t(lang, "p_what_do_you_offer") : t(lang, "p_services_offered")}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textDim, marginBottom: 14 }}>
+                    {regRole === "owner" ? t(lang, "p_select_asset_types") : t(lang, "p_select_services")}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {servicesList.map(s => {
+                      const active = regServices.includes(s.id);
+                      return (
+                        <label key={s.id} style={{
+                          display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+                          border: active ? `1px solid ${C.borderGold}` : `1px solid ${C.border}`,
+                          background: active ? C.goldGlow : "rgba(255,255,255,0.02)", transition: "all 0.15s",
+                        }}>
+                          <input type="checkbox" checked={active} onChange={() => toggleService(s.id)} style={{ accentColor: C.gold, width: 14, height: 14 }} />
+                          <span style={{ fontSize: 12, color: active ? C.gold : C.textMuted, fontFamily: FONT_B, fontWeight: active ? 600 : 400 }}>{serviceLabel(lang, s.id)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "1.5px" }} type="submit">
+                  {t(lang, "p_submit_request")}
+                </button>
+                <p style={{ fontSize: 10, color: C.textDim, textAlign: "center", marginTop: 14, lineHeight: 1.6 }}>
+                  {t(lang, "p_account_activated_note")}
+                </p>
+              </form>
+              <div style={{ marginTop: 16, textAlign: "center" }}>
+                <button type="button" style={{ background: "none", border: "none", color: C.textDim, fontSize: 12, cursor: "pointer", padding: 0, textDecoration: "underline" }} onClick={() => signOut({ redirect: false })}>
+                  {t(lang, "p_back_to_login")}
+                </button>
+              </div>
+            </div>
+          ) : (
+          <>
           {/* Login form */}
           {!isRegister && (
             <div style={cardGlass}>
@@ -4527,6 +4706,7 @@ export default function Home() {
                 </div>
                 <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "2px" }} type="submit">{t(lang, "p_login_button")}</button>
               </form>
+              <GoogleDivider lang={lang} onClick={handleGoogleSignIn} />
               <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${C.border}`, textAlign: "center" }}>
                 <span style={{ fontSize: 12, color: C.textDim }}>{t(lang, "p_no_account")}</span>
                 <button style={{ background: "none", border: "none", color: C.gold, fontSize: 12, cursor: "pointer", marginLeft: 8, padding: 0, textDecoration: "underline" }} onClick={() => { setIsRegister(true); setRegStep(1); }}>
@@ -4564,6 +4744,7 @@ export default function Home() {
               <button style={{ ...btn("gold"), width: "100%", padding: "13px 20px", fontSize: 12, letterSpacing: "1.5px" }} onClick={() => setRegStep(2)}>
                 {t(lang, "p_continue")}
               </button>
+              <GoogleDivider lang={lang} onClick={handleGoogleSignIn} />
               <div style={{ marginTop: 20, textAlign: "center" }}>
                 <button style={{ background: "none", border: "none", color: C.textDim, fontSize: 12, cursor: "pointer", padding: 0, textDecoration: "underline" }} onClick={() => setIsRegister(false)}>
                   {t(lang, "p_back_to_login")}
@@ -4651,7 +4832,7 @@ export default function Home() {
                     <div><label style={label}>{t(lang, "p_last_name")}</label><input style={input} value={regLastName} onChange={e => setRegLastName(e.target.value)} placeholder="Rossi" /></div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <div><label style={label}>{t(lang, "p_email")}</label><input style={input} type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="mario@email.com" /></div>
+                    <div><label style={label}>{t(lang, "p_email_required")}</label><input style={input} type="email" required value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="mario@email.com" /></div>
                     <div><label style={label}>{t(lang, "p_phone")}</label><input style={input} type="tel" value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="+39 340 ..." /></div>
                   </div>
                 </div>
@@ -4689,6 +4870,8 @@ export default function Home() {
                 </p>
               </form>
             </div>
+          )}
+          </>
           )}
         </div>
       </div>
@@ -4751,7 +4934,7 @@ export default function Home() {
                 </>
               )}
             </div>
-            <button style={{ ...btn(), padding: isMobile ? "6px 12px" : "8px 18px", fontSize: 11 }} onClick={() => setUser(null)}>{t(lang, "p_logout")}</button>
+            <button style={{ ...btn(), padding: isMobile ? "6px 12px" : "8px 18px", fontSize: 11 }} onClick={() => signOut({ redirect: false })}>{t(lang, "p_logout")}</button>
           </div>
         </header>
         {user.role === "admin" && <div className="no-print"><AdminDashboard user={user} data={dbData} refresh={fetchAll} lang={lang} /></div>}

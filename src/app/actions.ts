@@ -21,6 +21,7 @@ async function makeThumbnail(dataUri: string): Promise<string | null> {
 // --- HELPERS ---
 const uid = () => Math.random().toString(36).slice(2, 10);
 const hashPassword = (password: string) => createHash("sha256").update(password).digest("hex");
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 // --- INITIALIZATION ---
 export async function resetDatabase(adminUserId: string) {
@@ -135,6 +136,7 @@ export async function initDatabase() {
       "ALTER TABLE rooms ADD COLUMN bathrooms INTEGER",
       "ALTER TABLE properties ADD COLUMN description_i18n TEXT",
       "ALTER TABLE properties ADD COLUMN thumbnail TEXT",
+      "ALTER TABLE users ADD COLUMN google_id TEXT",
     ];
     // `dbReady` è un flag in memoria: si azzera ad ogni cold start serverless,
     // quindi queste migrazioni (quasi sempre no-op, la colonna esiste già) si
@@ -150,6 +152,8 @@ export async function initDatabase() {
     const indexes = [
       "CREATE INDEX IF NOT EXISTS idx_properties_asset_type_id ON properties(asset_type, id)",
       "CREATE INDEX IF NOT EXISTS idx_rooms_property_id ON rooms(property_id)",
+      "CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)",
+      "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
     ];
     await Promise.allSettled(indexes.map(sql => db.execute(sql)));
 
@@ -967,17 +971,61 @@ export async function registerUser(
     const nick = nickname.toLowerCase().trim();
     if (nick.length < 3) return { success: false, error: "Il nickname deve essere di almeno 3 caratteri." };
     if (password.length < 6) return { success: false, error: "La password deve essere di almeno 6 caratteri." };
+    const email = profile?.email?.trim().toLowerCase() || "";
+    if (!email) return { success: false, error: "L'email è obbligatoria." };
+    if (!isValidEmail(email)) return { success: false, error: "Email non valida." };
     const existing = await db.execute({ sql: "SELECT id FROM users WHERE nickname = ?", args: [nick] });
     if (existing.rows.length > 0) return { success: false, error: "Nickname già in uso." };
+    const existingEmail = await db.execute({ sql: "SELECT id FROM users WHERE email = ?", args: [email] });
+    if (existingEmail.rows.length > 0) return { success: false, error: "Email già in uso." };
     const id = `u${uid()}`;
     await db.execute({
       sql: "INSERT INTO users (id, nickname, role, password, status, first_name, last_name, email, phone, services, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       args: [
         id, nick, role, hashPassword(password), 'pending',
         profile?.firstName || null, profile?.lastName || null,
-        profile?.email || null, profile?.phone || null,
+        email, profile?.phone || null,
         profile?.services?.length ? JSON.stringify(profile.services) : null,
         profile?.avatar || null,
+        Date.now()
+      ],
+    });
+    revalidatePath("/");
+    return { success: true, id };
+  } catch (error) { return { success: false, error: String(error) }; }
+}
+
+// Registrazione avviata da Google: stesso comportamento di registerUser (status
+// 'pending', in attesa di approvazione admin) ma senza password — l'utente
+// autentica sempre via Google, come i profili creati da un admin (password NULL).
+export async function completeGoogleRegistration(
+  googleId: string,
+  email: string,
+  nickname: string,
+  role: "owner" | "concierge" | "agent",
+  profile?: { firstName?: string; lastName?: string; phone?: string; services?: string[]; avatar?: string }
+) {
+  try {
+    const nick = nickname.toLowerCase().trim();
+    if (nick.length < 3) return { success: false, error: "Il nickname deve essere di almeno 3 caratteri." };
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !isValidEmail(cleanEmail)) return { success: false, error: "Email non valida." };
+    const existingNick = await db.execute({ sql: "SELECT id FROM users WHERE nickname = ?", args: [nick] });
+    if (existingNick.rows.length > 0) return { success: false, error: "Nickname già in uso." };
+    const existingEmail = await db.execute({ sql: "SELECT id FROM users WHERE email = ?", args: [cleanEmail] });
+    if (existingEmail.rows.length > 0) return { success: false, error: "Email già in uso." };
+    const existingGoogle = await db.execute({ sql: "SELECT id FROM users WHERE google_id = ?", args: [googleId] });
+    if (existingGoogle.rows.length > 0) return { success: false, error: "Account Google già registrato." };
+    const id = `u${uid()}`;
+    await db.execute({
+      sql: "INSERT INTO users (id, nickname, role, status, first_name, last_name, email, phone, services, avatar, google_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      args: [
+        id, nick, role, 'pending',
+        profile?.firstName || null, profile?.lastName || null,
+        cleanEmail, profile?.phone || null,
+        profile?.services?.length ? JSON.stringify(profile.services) : null,
+        profile?.avatar || null,
+        googleId,
         Date.now()
       ],
     });
