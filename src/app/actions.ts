@@ -62,11 +62,15 @@ export async function initDatabase() {
     // ALTER TABLE in parallelo dal client il server le mette comunque in coda
     // una dietro l'altra — il problema non è la latenza di rete per richiesta,
     // è rieseguirle affatto quando lo schema è già a posto. Un solo controllo
-    // leggero sull'indice più recente (idx_rooms_property_id, l'ultimo creato
-    // in ordine di tempo) ci dice se tutto il resto (tabelle, colonne, altri
-    // indici) è già stato applicato, ed evita l'intera batteria in quel caso.
+    // leggero sull'indice più recente (l'ultimo creato in ordine di tempo) ci
+    // dice se tutto il resto (tabelle, colonne, altri indici) è già stato
+    // applicato, ed evita l'intera batteria in quel caso.
+    // IMPORTANTE: quando si aggiunge una nuova migrazione/indice in fondo agli
+    // array sotto, aggiornare anche il nome dell'indice qui — altrimenti le
+    // nuove migrazioni non verranno mai eseguite (il check corto-circuita
+    // prima di arrivarci).
     try {
-      const check = await db.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_rooms_property_id'");
+      const check = await db.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_users_google_id'");
       if (check.rows.length > 0) {
         dbReady = true;
         return { success: true };

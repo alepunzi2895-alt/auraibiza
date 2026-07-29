@@ -66,6 +66,7 @@ const en: Dict = {
   footer_platform: "Platform", footer_login: "Log in", footer_register: "Register", footer_collaborate: "Collaborate",
   footer_contacts: "Contacts",
   footer_rights: "All rights reserved",
+  footer_privacy: "Privacy Policy",
 
   pdf_open: "📄 Property Sheet", pdf_loading: "Loading…",
   available_units: "Available units", availability_heading: "Availability",
@@ -446,6 +447,7 @@ const it: Dict = {
   footer_platform: "Piattaforma", footer_login: "Accedi", footer_register: "Registrati", footer_collaborate: "Collabora",
   footer_contacts: "Contatti",
   footer_rights: "Tutti i diritti riservati",
+  footer_privacy: "Privacy Policy",
 
   pdf_open: "📄 Scheda PDF", pdf_loading: "Caricamento…",
   available_units: "Unità disponibili", availability_heading: "Disponibilità",
@@ -826,6 +828,7 @@ const es: Dict = {
   footer_platform: "Plataforma", footer_login: "Acceder", footer_register: "Registrarse", footer_collaborate: "Colabora",
   footer_contacts: "Contacto",
   footer_rights: "Todos los derechos reservados",
+  footer_privacy: "Política de privacidad",
 
   pdf_open: "📄 Ficha PDF", pdf_loading: "Cargando…",
   available_units: "Unidades disponibles", availability_heading: "Disponibilidad",
@@ -1206,6 +1209,7 @@ const de: Dict = {
   footer_platform: "Plattform", footer_login: "Anmelden", footer_register: "Registrieren", footer_collaborate: "Partner werden",
   footer_contacts: "Kontakt",
   footer_rights: "Alle Rechte vorbehalten",
+  footer_privacy: "Datenschutzerklärung",
 
   pdf_open: "📄 Objektbeschreibung", pdf_loading: "Wird geladen…",
   available_units: "Verfügbare Einheiten", availability_heading: "Verfügbarkeit",
@@ -1586,6 +1590,7 @@ const fr: Dict = {
   footer_platform: "Plateforme", footer_login: "Connexion", footer_register: "S'inscrire", footer_collaborate: "Collaborer",
   footer_contacts: "Contact",
   footer_rights: "Tous droits réservés",
+  footer_privacy: "Politique de confidentialité",
 
   pdf_open: "📄 Fiche PDF", pdf_loading: "Chargement…",
   available_units: "Unités disponibles", availability_heading: "Disponibilité",

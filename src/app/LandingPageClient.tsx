@@ -1032,6 +1032,7 @@ export default function LandingPage({ initialListings, initialThumbnails }: { in
         <div style={{ maxWidth: 1100, margin: "40px auto 0", paddingTop: 24, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div style={{ fontSize: 11, color: C.textDim }}>© {new Date().getFullYear()} Aura Ibiza · {t(lang, "footer_rights")}</div>
           <div style={{ display: "flex", gap: 20 }}>
+            <a href="/privacy" style={{ color: C.textDim, fontSize: 11, textDecoration: "none" }}>{t(lang, "footer_privacy")}</a>
             <a href="mailto:info.auraibiza@gmail.com" style={{ color: C.textDim, fontSize: 11, textDecoration: "none" }}>info.auraibiza@gmail.com</a>
             <a href="https://www.instagram.com/_aura_ibiza_/" target="_blank" rel="noopener noreferrer" style={{ color: C.textDim, fontSize: 11, textDecoration: "none" }}>Instagram</a>
           </div>
