@@ -221,7 +221,7 @@ const en: Dict = {
   p_nav_platform: "💰 Platform", p_nav_manageassets: "Manage Assets", p_nav_addasset: "➕ Add Asset",
   p_status_draft: "Draft", p_status_sent: "Sent", p_status_payment_submitted: "Payment Submitted", p_status_confirmed_owner: "Confirmed by Owner",
   p_status_confirmed_client: "Confirmed", p_status_evaso: "Completed", p_status_pending: "Pending", p_status_active: "Active",
-  p_common_save: "Save", p_common_cancel: "Cancel", p_common_delete: "Delete", p_common_edit: "Edit", p_common_add: "Add", p_common_choose_file: "Choose file",
+  p_common_save: "Save", p_common_saving: "Saving...", p_common_sending: "Sending...", p_common_cancel: "Cancel", p_common_delete: "Delete", p_common_edit: "Edit", p_common_add: "Add", p_common_choose_file: "Choose file",
   p_common_confirm: "Confirm", p_common_close: "Close", p_common_actions: "Actions", p_common_notes: "Notes", p_common_status: "Status",
   p_common_client: "Client", p_common_room: "Room", p_common_owner: "Owner", p_common_total: "Total", p_common_search: "Search",
 
@@ -639,7 +639,7 @@ const it: Dict = {
   p_nav_platform: "💰 Piattaforma", p_nav_manageassets: "Gestisci Asset", p_nav_addasset: "➕ Aggiungi Asset",
   p_status_draft: "Bozza", p_status_sent: "Inviato", p_status_payment_submitted: "Pagamento Inviato", p_status_confirmed_owner: "Confermata dal Proprietario",
   p_status_confirmed_client: "Confermata", p_status_evaso: "Evasa", p_status_pending: "In attesa", p_status_active: "Attivo",
-  p_common_save: "Salva", p_common_cancel: "Annulla", p_common_delete: "Elimina", p_common_edit: "Modifica", p_common_add: "Aggiungi", p_common_choose_file: "Scegli file",
+  p_common_save: "Salva", p_common_saving: "Salvataggio...", p_common_sending: "Invio...", p_common_cancel: "Annulla", p_common_delete: "Elimina", p_common_edit: "Modifica", p_common_add: "Aggiungi", p_common_choose_file: "Scegli file",
   p_common_confirm: "Conferma", p_common_close: "Chiudi", p_common_actions: "Azioni", p_common_notes: "Note", p_common_status: "Status",
   p_common_client: "Cliente", p_common_room: "Stanza", p_common_owner: "Proprietario", p_common_total: "Totale", p_common_search: "Cerca",
 
@@ -1057,7 +1057,7 @@ const es: Dict = {
   p_nav_platform: "💰 Plataforma", p_nav_manageassets: "Gestionar Activos", p_nav_addasset: "➕ Añadir Activo",
   p_status_draft: "Borrador", p_status_sent: "Enviado", p_status_payment_submitted: "Pago Enviado", p_status_confirmed_owner: "Confirmada por el Propietario",
   p_status_confirmed_client: "Confirmada", p_status_evaso: "Completada", p_status_pending: "Pendiente", p_status_active: "Activo",
-  p_common_save: "Guardar", p_common_cancel: "Cancelar", p_common_delete: "Eliminar", p_common_edit: "Editar", p_common_add: "Añadir", p_common_choose_file: "Elegir archivo",
+  p_common_save: "Guardar", p_common_saving: "Guardando...", p_common_sending: "Enviando...", p_common_cancel: "Cancelar", p_common_delete: "Eliminar", p_common_edit: "Editar", p_common_add: "Añadir", p_common_choose_file: "Elegir archivo",
   p_common_confirm: "Confirmar", p_common_close: "Cerrar", p_common_actions: "Acciones", p_common_notes: "Notas", p_common_status: "Estado",
   p_common_client: "Cliente", p_common_room: "Habitación", p_common_owner: "Propietario", p_common_total: "Total", p_common_search: "Buscar",
 
@@ -1475,7 +1475,7 @@ const de: Dict = {
   p_nav_platform: "💰 Plattform", p_nav_manageassets: "Vermögenswerte Verwalten", p_nav_addasset: "➕ Objekt Hinzufügen",
   p_status_draft: "Entwurf", p_status_sent: "Gesendet", p_status_payment_submitted: "Zahlung Gesendet", p_status_confirmed_owner: "Vom Eigentümer Bestätigt",
   p_status_confirmed_client: "Bestätigt", p_status_evaso: "Abgeschlossen", p_status_pending: "Ausstehend", p_status_active: "Aktiv",
-  p_common_save: "Speichern", p_common_cancel: "Abbrechen", p_common_delete: "Löschen", p_common_edit: "Bearbeiten", p_common_add: "Hinzufügen", p_common_choose_file: "Datei auswählen",
+  p_common_save: "Speichern", p_common_saving: "Speichern...", p_common_sending: "Senden...", p_common_cancel: "Abbrechen", p_common_delete: "Löschen", p_common_edit: "Bearbeiten", p_common_add: "Hinzufügen", p_common_choose_file: "Datei auswählen",
   p_common_confirm: "Bestätigen", p_common_close: "Schließen", p_common_actions: "Aktionen", p_common_notes: "Notizen", p_common_status: "Status",
   p_common_client: "Kunde", p_common_room: "Zimmer", p_common_owner: "Eigentümer", p_common_total: "Gesamt", p_common_search: "Suchen",
 
@@ -1893,7 +1893,7 @@ const fr: Dict = {
   p_nav_platform: "💰 Plateforme", p_nav_manageassets: "Gérer les Biens", p_nav_addasset: "➕ Ajouter un Bien",
   p_status_draft: "Brouillon", p_status_sent: "Envoyée", p_status_payment_submitted: "Paiement Envoyé", p_status_confirmed_owner: "Confirmée par le Propriétaire",
   p_status_confirmed_client: "Confirmée", p_status_evaso: "Terminée", p_status_pending: "En attente", p_status_active: "Actif",
-  p_common_save: "Enregistrer", p_common_cancel: "Annuler", p_common_delete: "Supprimer", p_common_edit: "Modifier", p_common_add: "Ajouter", p_common_choose_file: "Choisir un fichier",
+  p_common_save: "Enregistrer", p_common_saving: "Enregistrement...", p_common_sending: "Envoi...", p_common_cancel: "Annuler", p_common_delete: "Supprimer", p_common_edit: "Modifier", p_common_add: "Ajouter", p_common_choose_file: "Choisir un fichier",
   p_common_confirm: "Confirmer", p_common_close: "Fermer", p_common_actions: "Actions", p_common_notes: "Notes", p_common_status: "Statut",
   p_common_client: "Client", p_common_room: "Chambre", p_common_owner: "Propriétaire", p_common_total: "Total", p_common_search: "Rechercher",
 

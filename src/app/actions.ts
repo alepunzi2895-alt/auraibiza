@@ -1012,7 +1012,8 @@ export async function requestPasswordReset(identifier: string, lang: Lang = "it"
     if (!user.email) return { success: true };
     if (!user.password) {
       // Account solo-Google: nessun token di reset, solo un avviso a usare "Continua con Google".
-      await sendGoogleOnlyNotice(user.email, lang);
+      const sendRes = await sendGoogleOnlyNotice(user.email, lang);
+      if (!sendRes.success) console.error("sendGoogleOnlyNotice failed:", sendRes.error);
       return { success: true };
     }
     const token = randomBytes(32).toString("hex");
@@ -1020,7 +1021,8 @@ export async function requestPasswordReset(identifier: string, lang: Lang = "it"
     await db.execute({ sql: "UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?", args: [token, expires, user.id] });
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
     const resetUrl = `${baseUrl}/platform?resetToken=${token}`;
-    await sendPasswordResetEmail(user.email, resetUrl, lang);
+    const sendRes = await sendPasswordResetEmail(user.email, resetUrl, lang);
+    if (!sendRes.success) console.error("sendPasswordResetEmail failed:", sendRes.error);
     return { success: true };
   } catch (error) {
     console.error("requestPasswordReset error:", error);

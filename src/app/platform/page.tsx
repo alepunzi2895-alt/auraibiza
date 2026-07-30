@@ -4591,6 +4591,7 @@ function MyProfileModal({ user, allUsers, refresh, lang, onClose }: { user: User
   const [pwNew, setPwNew] = useState("");
   const [pwConfirm, setPwConfirm] = useState("");
   const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [pwSaving, setPwSaving] = useState(false);
 
   const isGoogleOnly = !me.password;
   const servicesList = user.role === "owner" ? OWNER_SERVICES : CONCIERGE_SERVICES;
@@ -4615,7 +4616,9 @@ function MyProfileModal({ user, allUsers, refresh, lang, onClose }: { user: User
     setPwMsg(null);
     if (!pwCurrent || !pwNew || !pwConfirm) { setPwMsg({ text: t(lang, "p_cd_fill_all_fields"), ok: false }); return; }
     if (pwNew !== pwConfirm) { setPwMsg({ text: t(lang, "p_cd_passwords_dont_match"), ok: false }); return; }
+    setPwSaving(true);
     const res = await changePasswordAction(user.id, pwCurrent, pwNew);
+    setPwSaving(false);
     if ((res as any).error) setPwMsg({ text: (res as any).error, ok: false });
     else { setPwMsg({ text: t(lang, "p_cd_password_updated"), ok: true }); setPwCurrent(""); setPwNew(""); setPwConfirm(""); }
   };
@@ -4709,7 +4712,7 @@ function MyProfileModal({ user, allUsers, refresh, lang, onClose }: { user: User
         )}
 
         {msg && <div style={{ fontSize: 12, padding: "8px 12px", borderRadius: 4, marginBottom: 14, background: msg.ok ? C.success + "20" : C.danger + "20", color: msg.ok ? C.success : C.danger, border: `1px solid ${msg.ok ? C.success : C.danger}44` }}>{msg.text}</div>}
-        <button style={{ ...btn("gold"), width: "100%", marginBottom: 8 }} disabled={saving} onClick={handleSave}>{t(lang, "p_common_save")}</button>
+        <button style={{ ...btn("gold"), width: "100%", marginBottom: 8, opacity: saving ? 0.7 : 1, cursor: saving ? "wait" : "pointer" }} disabled={saving} onClick={handleSave}>{saving ? t(lang, "p_common_saving") : t(lang, "p_common_save")}</button>
 
         {/* Password */}
         <div style={{ marginTop: 20, paddingTop: 20, borderTop: `1px solid ${C.border}` }}>
@@ -4722,7 +4725,7 @@ function MyProfileModal({ user, allUsers, refresh, lang, onClose }: { user: User
               <div><label style={label}>{t(lang, "p_cd_new_password")}</label><input type="password" style={input} value={pwNew} onChange={e => setPwNew(e.target.value)} placeholder={t(lang, "p_password_ph")} /></div>
               <div><label style={label}>{t(lang, "p_cd_confirm_new_password")}</label><input type="password" style={input} value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} placeholder="••••••••" /></div>
               {pwMsg && <div style={{ fontSize: 12, padding: "8px 12px", borderRadius: 4, background: pwMsg.ok ? C.success + "20" : C.danger + "20", color: pwMsg.ok ? C.success : C.danger, border: `1px solid ${pwMsg.ok ? C.success : C.danger}44` }}>{pwMsg.text}</div>}
-              <button style={{ ...btn("gold"), alignSelf: "flex-start" }} onClick={handlePasswordChange}>{t(lang, "p_cd_update_password")}</button>
+              <button style={{ ...btn("gold"), alignSelf: "flex-start", opacity: pwSaving ? 0.7 : 1, cursor: pwSaving ? "wait" : "pointer" }} disabled={pwSaving} onClick={handlePasswordChange}>{pwSaving ? t(lang, "p_common_saving") : t(lang, "p_cd_update_password")}</button>
             </div>
           )}
         </div>
@@ -5030,8 +5033,8 @@ export default function Home() {
                     <input style={input} type="password" value={resetConfirmPassword} onChange={e => setResetConfirmPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
                   </div>
                   {resetMsg && <div style={{ fontSize: 12, padding: "8px 12px", borderRadius: 4, marginBottom: 16, background: resetMsg.ok ? C.success + "20" : C.danger + "20", color: resetMsg.ok ? C.success : C.danger, border: `1px solid ${resetMsg.ok ? C.success : C.danger}44` }}>{resetMsg.text}</div>}
-                  <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "2px" }} type="submit" disabled={resetLoading}>
-                    {t(lang, "p_reset_password_submit")}
+                  <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "2px", opacity: resetLoading ? 0.7 : 1, cursor: resetLoading ? "wait" : "pointer" }} type="submit" disabled={resetLoading}>
+                    {resetLoading ? t(lang, "p_common_saving") : t(lang, "p_reset_password_submit")}
                   </button>
                 </form>
               )}
@@ -5197,8 +5200,8 @@ export default function Home() {
                     <label style={label}>{t(lang, "p_nickname")} / Email</label>
                     <input style={input} value={forgotIdentifier} onChange={e => setForgotIdentifier(e.target.value)} placeholder={t(lang, "p_nickname_ph")} autoComplete="username" />
                   </div>
-                  <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "2px" }} type="submit" disabled={forgotLoading}>
-                    {t(lang, "p_forgot_password_submit")}
+                  <button style={{ ...btn("gold"), width: "100%", padding: "14px 20px", fontSize: 12, letterSpacing: "2px", opacity: forgotLoading ? 0.7 : 1, cursor: forgotLoading ? "wait" : "pointer" }} type="submit" disabled={forgotLoading}>
+                    {forgotLoading ? t(lang, "p_common_sending") : t(lang, "p_forgot_password_submit")}
                   </button>
                   <div style={{ marginTop: 16, textAlign: "center" }}>
                     <button type="button" style={{ background: "none", border: "none", color: C.textDim, fontSize: 12, cursor: "pointer", padding: 0, textDecoration: "underline" }} onClick={() => setForgotPasswordOpen(false)}>

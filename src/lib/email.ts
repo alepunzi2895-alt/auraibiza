@@ -12,7 +12,11 @@ function getResend(): Resend {
   return _resend;
 }
 
-const FROM = "Aura Ibiza <noreply@auraibiza.com>";
+// onboarding@resend.dev è il mittente sandbox di Resend: funziona senza dominio
+// verificato, ma consegna solo alla casella con cui è stato creato l'account
+// Resend. Passare a noreply@auraibiza.com una volta verificato il dominio.
+const FROM = "Aura Ibiza <onboarding@resend.dev>";
+const LOGO_URL = "https://auraibiza.vercel.app/logo.png";
 
 // Wrapper generico di invio, riusabile anche per le future notifiche di
 // prenotazione (nuova prenotazione, cambio stato) oltre al reset password.
@@ -31,6 +35,7 @@ const emailShell = (bodyHtml: string) => `
 <div style="background:#080B0F;padding:40px 20px;font-family:'DM Sans',Helvetica,Arial,sans-serif;">
   <div style="max-width:480px;margin:0 auto;background:#10141C;border:1px solid rgba(200,169,110,0.25);border-radius:16px;padding:32px;">
     <div style="text-align:center;margin-bottom:24px;">
+      <img src="${LOGO_URL}" alt="Aura Ibiza" width="56" height="56" style="border-radius:50%;margin-bottom:12px;" />
       <div style="font-family:Georgia,serif;font-size:22px;letter-spacing:3px;color:#E8D5A8;text-transform:uppercase;">Aura Ibiza</div>
     </div>
     ${bodyHtml}
