@@ -138,6 +138,7 @@ Password non riportata in chiaro nella documentazione.
 - [ ] Sezione dashboard ispirata a ibizabeyond.com/reseller (da analizzare con screenshot)
 - [ ] PDF ricevute prenotazione (lato server con react-pdf)
 - [ ] Notifiche email su nuova prenotazione / cambio status (a `info.auraibiza@gmail.com` + concierge/agent/cliente) — riusa `src/lib/email.ts` già introdotto per il reset password
+- [ ] Verificare un dominio su Resend (non si possiede `auraibiza.com`) per poter inviare email a indirizzi reali degli utenti — oggi `src/lib/email.ts` usa il mittente sandbox `onboarding@resend.dev`, che consegna solo alla casella con cui è stato creato l'account Resend (non a owner/concierge/agent reali)
 - [ ] Stripe per pagamenti online
 - [ ] Calendario vista mensile aggregata multi-property
 - [ ] Export CSV prenotazioni e pagamenti
