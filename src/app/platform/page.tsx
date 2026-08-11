@@ -932,6 +932,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
       fee_mode: feeMode, fee_value: Number(conciergeFee) || 0,
       pickup_time: isVehicleAsset(selectedRoomAssetType) ? pickupTime : null,
       dropoff_time: isVehicleAsset(selectedRoomAssetType) ? dropoffTime : null,
+      lang,
     });
     setMsg(t(lang, "p_cd_booking_created"));
     setClientName(""); setClientSurname(""); setClientEmail(""); setNotes(""); setPickupTime(""); setDropoffTime("");
@@ -953,7 +954,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
   };
 
   const handleStatusChange = async (id: string, st: string) => {
-    await updateBookingStatus(id, st);
+    await updateBookingStatus(id, st, lang);
     if (st === "confirmed_client") setMsg(t(lang, "p_cd_booking_confirmed_locked"));
     else setMsg(t(lang, "p_cd_status_updated_to", { status: st }));
     refresh();
@@ -1022,7 +1023,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
       });
     }
 
-    await submitPaymentProposal(payModal.id, payments);
+    await submitPaymentProposal(payModal.id, payments, lang);
     setMsg(t(lang, "p_cd_proposal_sent_to", { name: bOwnerName }));
     setPayModal(null);
     setAccontoAmount("");
@@ -1938,6 +1939,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
       fee_value: rawFeeVal,
       pickup_time: isVehicleAsset(selectedRoomAssetType) ? pickupTime : null,
       dropoff_time: isVehicleAsset(selectedRoomAssetType) ? dropoffTime : null,
+      lang,
     });
     // Proprietario crea inizialmente una bozza
     setMsg(t(lang, "p_od_booking_draft_registered"));
@@ -1958,7 +1960,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
     refresh();
   };
 
-  const handleConfirmOwner = async (id: string) => { await updateBookingStatus(id, "confirmed_owner"); refresh(); setMsg(t(lang, "p_od_confirmed_calendar_locked")); };
+  const handleConfirmOwner = async (id: string) => { await updateBookingStatus(id, "confirmed_owner", lang); refresh(); setMsg(t(lang, "p_od_confirmed_calendar_locked")); };
 
   const handleRegisterPayment = async () => {
     if (!accontoAmount) { setMsg(t(lang, "p_od_enter_deposit_amount_warn")); return; }
@@ -1990,7 +1992,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
       });
     }
 
-    await submitPaymentProposal(payModal.id, payments);
+    await submitPaymentProposal(payModal.id, payments, lang);
     setPayModal(null);
     setAccontoAmount("");
     setMsg(t(lang, "p_od_deposit_registered_pending"));
@@ -2011,16 +2013,16 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
       payments.push({ booking_id: payModal.id, amount: stornoVal, date: accontoDate, method: accontoMethod, type: 'storno_owner_out', receiver: user.id });
       payments.push({ booking_id: payModal.id, amount: stornoVal, date: accontoDate, method: "", type: 'storno_owner_in', receiver: actualOwnerId });
     }
-    await submitPaymentProposal(payModal.id, payments);
+    await submitPaymentProposal(payModal.id, payments, lang);
     setPayModal(null); setPayModalIsCollab(false); setAccontoAmount("");
     setMsg(t(lang, "p_od_deposit_registered_owner_verify"));
     refresh();
   };
 
-  const handleStatusChange = async (id: string, s: string) => { await updateBookingStatus(id, s); refresh(); };
+  const handleStatusChange = async (id: string, s: string) => { await updateBookingStatus(id, s, lang); refresh(); };
 
   const handleRecordFinalBalance = async (bookingId: string, userId: string, data: any) => {
-    await recordFinalBalance(bookingId, { amount: data.amount, date: data.date, method: data.method });
+    await recordFinalBalance(bookingId, { amount: data.amount, date: data.date, method: data.method }, undefined, lang);
     setBalanceModal(null);
     setMsg(t(lang, "p_od_balance_closed"));
     refresh();
@@ -3052,7 +3054,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
 
                 <div style={{ display: "flex", gap: 10 }}>
                   <button style={{ ...btn("gold"), flex: 1 }} onClick={async () => {
-                    await confirmPaymentAndBlock(confirmModal.id, user.id, confirmData);
+                    await confirmPaymentAndBlock(confirmModal.id, user.id, confirmData, lang);
                     setMsg(t(lang, "p_od_confirmed_calendar_locked"));
                     setConfirmModal(null);
                     refresh();
@@ -3493,7 +3495,7 @@ function AdminDashboard({ user, data, refresh, lang }: { user: User; data: any; 
   }, [allBookings, bkSearch, bkStatus, bkRoom, bkYear, bkMonth]);
 
   const handleAdminStatusChange = async (id: string, status: string) => {
-    await updateBookingStatus(id, status);
+    await updateBookingStatus(id, status, lang);
     setMsg(t(lang, "p_ad_status_updated"));
     refresh();
   };

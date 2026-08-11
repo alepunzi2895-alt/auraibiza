@@ -412,8 +412,9 @@ export async function setCommissionRule(userId: string, rate: number, mode: stri
 // Notifica via email tutte le parti coinvolte in una prenotazione (cliente, owner,
 // concierge, agente) alla creazione e ad ogni cambio di stato. Non blocca mai il
 // flusso principale: eventuali errori di invio vengono solo loggati, non propagati.
-async function notifyBookingParties(bookingId: string, isNew: boolean) {
+async function notifyBookingParties(bookingId: string, isNew: boolean, lang?: Lang) {
   try {
+    const emailLang: Lang = lang || DEFAULT_LANG;
     const bRes = await db.execute({ sql: "SELECT * FROM bookings WHERE id = ?", args: [bookingId] });
     const booking = bRes.rows[0] as any;
     if (!booking) return;
@@ -435,13 +436,15 @@ async function notifyBookingParties(bookingId: string, isNew: boolean) {
     }
 
     const propertyLabel = `${property?.name || ''}${room?.name ? ' — ' + room.name : ''}`;
-    const statusLabel = t(DEFAULT_LANG, `p_status_${booking.status}`);
+    const statusLabel = t(emailLang, `p_status_${booking.status}`);
     const clientName = `${booking.client_name}${booking.client_surname ? ' ' + booking.client_surname : ''}`;
+    // Solo dati non finanziari: nessuna commissione/prezzo va mai inclusa qui, così
+    // resta strutturalmente impossibile che l'email al cliente riveli fee o margini.
     const vars = { name: clientName, client: clientName, property: propertyLabel, start: booking.start_date, end: booking.end_date, status: statusLabel };
 
     const sendPromises: Promise<{ success: boolean; error?: string }>[] = [];
-    if (booking.client_email) sendPromises.push(sendBookingClientEmail(booking.client_email, DEFAULT_LANG, isNew, vars));
-    for (const email of Array.from(teamEmails)) sendPromises.push(sendBookingTeamEmail(email, DEFAULT_LANG, isNew, vars));
+    if (booking.client_email) sendPromises.push(sendBookingClientEmail(booking.client_email, emailLang, isNew, vars));
+    for (const email of Array.from(teamEmails)) sendPromises.push(sendBookingTeamEmail(email, emailLang, isNew, vars));
 
     const results = await Promise.all(sendPromises);
     for (const r of results) if (!r.success) console.error("Booking notification email failed:", r.error);
@@ -494,7 +497,7 @@ export async function createBooking(data: any) {
       args: [id, data.room_id, data.concierge_id, data.client_name, data.client_surname || "", data.client_email || null, data.start_date, data.end_date, data.notes || "", data.owner_price_total, data.concierge_fee, totalPrice, "draft", data.stay_price_total || 0, data.cleaning_fee_total || 0, data.guests_count || 1, data.fee_mode || 'per_night', data.fee_value || 0, data.asset_type || 'apartment', platformFee, platformFeeRate, agentFee, agentId, conciergeCommissionOnAgent, data.pickup_time || null, data.dropoff_time || null, Date.now()],
     });
     revalidatePath("/");
-    await notifyBookingParties(id, true);
+    await notifyBookingParties(id, true, data.lang);
     return { id };
   } catch (error) { return { id: "", error: String(error) }; }
 }
@@ -509,11 +512,11 @@ export async function calcCascadeSplit(ownerPriceTotal: number, platformFeeRate:
   return { platformFee, ownerNet, conciergeNet, agentNet, totalClient };
 }
 
-export async function updateBookingStatus(id: string, status: string) {
+export async function updateBookingStatus(id: string, status: string, lang?: Lang) {
   try {
     await db.execute({ sql: "UPDATE bookings SET status = ? WHERE id = ?", args: [status, id] });
     revalidatePath("/");
-    await notifyBookingParties(id, false);
+    await notifyBookingParties(id, false, lang);
   } catch (error) { console.error(error); }
 }
 
@@ -526,7 +529,7 @@ export async function deleteBookingAction(id: string) {
   } catch (error) { return { success: false, error: String(error) }; }
 }
 
-export async function submitPaymentProposal(bookingId: string, payments: any[]) {
+export async function submitPaymentProposal(bookingId: string, payments: any[], lang?: Lang) {
   try {
     await db.execute({ sql: "DELETE FROM payments WHERE booking_id = ?", args: [bookingId] });
     for (const p of payments) {
@@ -537,11 +540,11 @@ export async function submitPaymentProposal(bookingId: string, payments: any[]) 
     }
     await db.execute({ sql: "UPDATE bookings SET status = 'payment_submitted' WHERE id = ?", args: [bookingId] });
     revalidatePath("/");
-    await notifyBookingParties(bookingId, false);
+    await notifyBookingParties(bookingId, false, lang);
   } catch (error) { console.error(error); }
 }
 
-export async function confirmPaymentAndBlock(bookingId: string, userId: string, confirmData?: { date: string; method: string }) {
+export async function confirmPaymentAndBlock(bookingId: string, userId: string, confirmData?: { date: string; method: string }, lang?: Lang) {
   try {
     if (confirmData) {
       await db.execute({
@@ -551,11 +554,11 @@ export async function confirmPaymentAndBlock(bookingId: string, userId: string, 
     }
     await db.execute({ sql: "UPDATE bookings SET status = 'confirmed_owner' WHERE id = ?", args: [bookingId] });
     revalidatePath("/");
-    await notifyBookingParties(bookingId, false);
+    await notifyBookingParties(bookingId, false, lang);
   } catch (error) { console.error(error); }
 }
 
-export async function recordFinalBalance(bookingId: string, p: any, _storno?: any) {
+export async function recordFinalBalance(bookingId: string, p: any, _storno?: any, lang?: Lang) {
   try {
     await db.execute({
       sql: "INSERT INTO payments (id, booking_id, type, amount, payment_date, method, receiver, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -563,7 +566,7 @@ export async function recordFinalBalance(bookingId: string, p: any, _storno?: an
     });
     await db.execute({ sql: "UPDATE bookings SET status = 'evaso' WHERE id = ?", args: [bookingId] });
     revalidatePath("/");
-    await notifyBookingParties(bookingId, false);
+    await notifyBookingParties(bookingId, false, lang);
   } catch (error) { console.error(error); }
 }
 
