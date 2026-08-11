@@ -4771,13 +4771,15 @@ export default function Home() {
   const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? window.localStorage.getItem("aura_platform_lang") : null;
+    // Stessa chiave della homepage ("aura_lang"): la lingua scelta lì vale anche
+    // qui, senza dover selezionarla di nuovo entrando in piattaforma.
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem("aura_lang") : null;
     if (saved && LANGUAGES.some(l => l.code === saved)) setLang(saved as Lang);
   }, []);
   const changeLang = (l: Lang) => {
     setLang(l);
     setLangMenuOpen(false);
-    if (typeof window !== "undefined") window.localStorage.setItem("aura_platform_lang", l);
+    if (typeof window !== "undefined") window.localStorage.setItem("aura_lang", l);
   };
 
   // Registration extended fields
