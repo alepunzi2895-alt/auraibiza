@@ -235,7 +235,7 @@ const en: Dict = {
   p_cd_mode: "Mode", p_cd_your_agent_fee: "Your Agent Fee (€ total)", p_cd_concierge_keeps: "The concierge keeps",
   p_cd_to_you: "→ to you:", p_cd_split_summary: "Split Summary", p_cd_cleaning: "Cleaning", p_cd_your_agent_fee_short: "Your Agent Fee",
   p_cd_client_total: "Client Total", p_cd_distribution: "Distribution: Owner €{owner} · Concierge €{concierge} · You €{you}",
-  p_cd_create_booking: "Create Booking", p_cd_booking_created: "Booking created", p_cd_bookings_title: "Bookings", p_cd_search_client: "🔍 Search client...",
+  p_cd_create_booking: "Create Booking", p_cd_booking_created: "Booking created", p_cd_client_email: "Client Email", p_cd_client_email_hint: "Optional — the client will receive booking confirmations and status updates by email.", p_cd_bookings_title: "Bookings", p_cd_search_client: "🔍 Search client...",
   p_cd_no_structure_title: "No authorized property", p_cd_no_structure_desc: "You don't have access to any property yet. Ask the owner to add you as a collaborator using your nickname:",
   p_filter_all_statuses: "All statuses", p_filter_all_rooms: "All rooms", p_filter_year: "Year", p_filter_month: "Month",
   p_no_bookings_found: "No bookings found.",
@@ -431,6 +431,21 @@ const en: Dict = {
   assistant_view_details: "View details",
   assistant_error: "Something went wrong. Please try again.",
   assistant_close: "Close",
+
+  // --- BOOKING EMAIL NOTIFICATIONS ---
+  email_booking_client_new_subject: "We've received your booking request — {property}",
+  email_booking_client_new_heading: "Booking request received",
+  email_booking_client_new_body: "Hello {name}, thank you for your request for {property} from {start} to {end}. Current status: {status}. Our team will be in touch shortly to confirm every detail.",
+  email_booking_client_status_subject: "Booking update — {property}",
+  email_booking_client_status_heading: "Your booking status has changed",
+  email_booking_client_status_body: "Hello {name}, your booking for {property} from {start} to {end} is now: {status}.",
+  email_booking_team_new_subject: "New booking — {property}",
+  email_booking_team_new_heading: "New booking created",
+  email_booking_team_new_body: "A new booking has been created for {property}. Client: {client}, {start} → {end}. Status: {status}.",
+  email_booking_team_status_subject: "Booking status updated — {property}",
+  email_booking_team_status_heading: "Booking status updated",
+  email_booking_team_status_body: "The booking for {property} (client {client}, {start} → {end}) is now: {status}.",
+  email_view_booking_button: "Open the platform",
 };
 
 const it: Dict = {
@@ -653,7 +668,7 @@ const it: Dict = {
   p_cd_mode: "Modalità", p_cd_your_agent_fee: "La Mia Fee Agente (€ totale)", p_cd_concierge_keeps: "Il concierge trattiene",
   p_cd_to_you: "→ a te:", p_cd_split_summary: "Split Riepilogo", p_cd_cleaning: "Pulizie", p_cd_your_agent_fee_short: "Tua Fee Agente",
   p_cd_client_total: "Totale Cliente", p_cd_distribution: "Distribuzione: Owner €{owner} · Concierge €{concierge} · Tu €{you}",
-  p_cd_create_booking: "Crea Prenotazione", p_cd_booking_created: "Prenotazione creata", p_cd_bookings_title: "Prenotazioni", p_cd_search_client: "🔍 Cerca cliente...",
+  p_cd_create_booking: "Crea Prenotazione", p_cd_booking_created: "Prenotazione creata", p_cd_client_email: "Email Cliente", p_cd_client_email_hint: "Facoltativa — il cliente riceverà conferme e aggiornamenti di stato via email.", p_cd_bookings_title: "Prenotazioni", p_cd_search_client: "🔍 Cerca cliente...",
   p_cd_no_structure_title: "Nessuna struttura autorizzata", p_cd_no_structure_desc: "Non hai ancora accesso a nessuna proprietà. Chiedi al proprietario di aggiungerti come collaboratore usando il tuo nickname:",
   p_filter_all_statuses: "Tutti gli stati", p_filter_all_rooms: "Tutte le stanze", p_filter_year: "Anno", p_filter_month: "Mese",
   p_no_bookings_found: "Nessuna prenotazione trovata.",
@@ -849,6 +864,21 @@ const it: Dict = {
   assistant_view_details: "Vedi dettagli",
   assistant_error: "Qualcosa è andato storto. Riprova.",
   assistant_close: "Chiudi",
+
+  // --- NOTIFICHE EMAIL PRENOTAZIONI ---
+  email_booking_client_new_subject: "Abbiamo ricevuto la tua richiesta di prenotazione — {property}",
+  email_booking_client_new_heading: "Richiesta di prenotazione ricevuta",
+  email_booking_client_new_body: "Ciao {name}, grazie per la tua richiesta per {property} dal {start} al {end}. Stato attuale: {status}. Il nostro team ti contatterà a breve per confermare ogni dettaglio.",
+  email_booking_client_status_subject: "Aggiornamento prenotazione — {property}",
+  email_booking_client_status_heading: "Lo stato della tua prenotazione è cambiato",
+  email_booking_client_status_body: "Ciao {name}, la tua prenotazione per {property} dal {start} al {end} è ora: {status}.",
+  email_booking_team_new_subject: "Nuova prenotazione — {property}",
+  email_booking_team_new_heading: "Nuova prenotazione creata",
+  email_booking_team_new_body: "È stata creata una nuova prenotazione per {property}. Cliente: {client}, {start} → {end}. Stato: {status}.",
+  email_booking_team_status_subject: "Stato prenotazione aggiornato — {property}",
+  email_booking_team_status_heading: "Stato prenotazione aggiornato",
+  email_booking_team_status_body: "La prenotazione per {property} (cliente {client}, {start} → {end}) è ora: {status}.",
+  email_view_booking_button: "Apri la piattaforma",
 };
 
 const es: Dict = {
@@ -1071,7 +1101,7 @@ const es: Dict = {
   p_cd_mode: "Modo", p_cd_your_agent_fee: "Mi Fee de Agente (€ total)", p_cd_concierge_keeps: "El concierge retiene",
   p_cd_to_you: "→ para ti:", p_cd_split_summary: "Resumen del Reparto", p_cd_cleaning: "Limpieza", p_cd_your_agent_fee_short: "Tu Fee de Agente",
   p_cd_client_total: "Total Cliente", p_cd_distribution: "Reparto: Propietario €{owner} · Concierge €{concierge} · Tú €{you}",
-  p_cd_create_booking: "Crear Reserva", p_cd_booking_created: "Reserva creada", p_cd_bookings_title: "Reservas", p_cd_search_client: "🔍 Buscar cliente...",
+  p_cd_create_booking: "Crear Reserva", p_cd_booking_created: "Reserva creada", p_cd_client_email: "Email del Cliente", p_cd_client_email_hint: "Opcional — el cliente recibirá confirmaciones y actualizaciones de estado por email.", p_cd_bookings_title: "Reservas", p_cd_search_client: "🔍 Buscar cliente...",
   p_cd_no_structure_title: "Ninguna propiedad autorizada", p_cd_no_structure_desc: "Aún no tienes acceso a ninguna propiedad. Pide al propietario que te añada como colaborador usando tu nickname:",
   p_filter_all_statuses: "Todos los estados", p_filter_all_rooms: "Todas las habitaciones", p_filter_year: "Año", p_filter_month: "Mes",
   p_no_bookings_found: "No se encontraron reservas.",
@@ -1267,6 +1297,21 @@ const es: Dict = {
   assistant_view_details: "Ver detalles",
   assistant_error: "Algo salió mal. Inténtalo de nuevo.",
   assistant_close: "Cerrar",
+
+  // --- NOTIFICACIONES POR EMAIL DE RESERVAS ---
+  email_booking_client_new_subject: "Hemos recibido tu solicitud de reserva — {property}",
+  email_booking_client_new_heading: "Solicitud de reserva recibida",
+  email_booking_client_new_body: "Hola {name}, gracias por tu solicitud para {property} del {start} al {end}. Estado actual: {status}. Nuestro equipo se pondrá en contacto contigo en breve para confirmar todos los detalles.",
+  email_booking_client_status_subject: "Actualización de reserva — {property}",
+  email_booking_client_status_heading: "El estado de tu reserva ha cambiado",
+  email_booking_client_status_body: "Hola {name}, tu reserva para {property} del {start} al {end} ahora está: {status}.",
+  email_booking_team_new_subject: "Nueva reserva — {property}",
+  email_booking_team_new_heading: "Nueva reserva creada",
+  email_booking_team_new_body: "Se ha creado una nueva reserva para {property}. Cliente: {client}, {start} → {end}. Estado: {status}.",
+  email_booking_team_status_subject: "Estado de reserva actualizado — {property}",
+  email_booking_team_status_heading: "Estado de reserva actualizado",
+  email_booking_team_status_body: "La reserva para {property} (cliente {client}, {start} → {end}) ahora está: {status}.",
+  email_view_booking_button: "Abrir la plataforma",
 };
 
 const de: Dict = {
@@ -1489,7 +1534,7 @@ const de: Dict = {
   p_cd_mode: "Modus", p_cd_your_agent_fee: "Meine Agentengebühr (€ gesamt)", p_cd_concierge_keeps: "Der Concierge behält",
   p_cd_to_you: "→ an Sie:", p_cd_split_summary: "Aufteilungsübersicht", p_cd_cleaning: "Reinigung", p_cd_your_agent_fee_short: "Ihre Agentengebühr",
   p_cd_client_total: "Kundengesamt", p_cd_distribution: "Aufteilung: Eigentümer €{owner} · Concierge €{concierge} · Sie €{you}",
-  p_cd_create_booking: "Buchung Erstellen", p_cd_booking_created: "Buchung erstellt", p_cd_bookings_title: "Buchungen", p_cd_search_client: "🔍 Kunde suchen...",
+  p_cd_create_booking: "Buchung Erstellen", p_cd_booking_created: "Buchung erstellt", p_cd_client_email: "Kunden-E-Mail", p_cd_client_email_hint: "Optional — der Kunde erhält Buchungsbestätigungen und Statusaktualisierungen per E-Mail.", p_cd_bookings_title: "Buchungen", p_cd_search_client: "🔍 Kunde suchen...",
   p_cd_no_structure_title: "Keine autorisierte Immobilie", p_cd_no_structure_desc: "Sie haben noch keinen Zugang zu einer Immobilie. Bitten Sie den Eigentümer, Sie mit Ihrem Nickname als Partner hinzuzufügen:",
   p_filter_all_statuses: "Alle Status", p_filter_all_rooms: "Alle Zimmer", p_filter_year: "Jahr", p_filter_month: "Monat",
   p_no_bookings_found: "Keine Buchungen gefunden.",
@@ -1685,6 +1730,21 @@ const de: Dict = {
   assistant_view_details: "Details ansehen",
   assistant_error: "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
   assistant_close: "Schließen",
+
+  // --- BUCHUNGS-E-MAIL-BENACHRICHTIGUNGEN ---
+  email_booking_client_new_subject: "Wir haben Ihre Buchungsanfrage erhalten — {property}",
+  email_booking_client_new_heading: "Buchungsanfrage erhalten",
+  email_booking_client_new_body: "Hallo {name}, vielen Dank für Ihre Anfrage für {property} vom {start} bis {end}. Aktueller Status: {status}. Unser Team wird sich in Kürze bei Ihnen melden, um alle Details zu bestätigen.",
+  email_booking_client_status_subject: "Buchungsaktualisierung — {property}",
+  email_booking_client_status_heading: "Der Status Ihrer Buchung hat sich geändert",
+  email_booking_client_status_body: "Hallo {name}, Ihre Buchung für {property} vom {start} bis {end} lautet jetzt: {status}.",
+  email_booking_team_new_subject: "Neue Buchung — {property}",
+  email_booking_team_new_heading: "Neue Buchung erstellt",
+  email_booking_team_new_body: "Für {property} wurde eine neue Buchung erstellt. Kunde: {client}, {start} → {end}. Status: {status}.",
+  email_booking_team_status_subject: "Buchungsstatus aktualisiert — {property}",
+  email_booking_team_status_heading: "Buchungsstatus aktualisiert",
+  email_booking_team_status_body: "Die Buchung für {property} (Kunde {client}, {start} → {end}) lautet jetzt: {status}.",
+  email_view_booking_button: "Plattform öffnen",
 };
 
 const fr: Dict = {
@@ -1907,7 +1967,7 @@ const fr: Dict = {
   p_cd_mode: "Mode", p_cd_your_agent_fee: "Mes Frais d'Agent (€ total)", p_cd_concierge_keeps: "Le concierge conserve",
   p_cd_to_you: "→ pour vous :", p_cd_split_summary: "Résumé de la Répartition", p_cd_cleaning: "Ménage", p_cd_your_agent_fee_short: "Vos Frais d'Agent",
   p_cd_client_total: "Total Client", p_cd_distribution: "Répartition : Propriétaire €{owner} · Concierge €{concierge} · Vous €{you}",
-  p_cd_create_booking: "Créer la Réservation", p_cd_booking_created: "Réservation créée", p_cd_bookings_title: "Réservations", p_cd_search_client: "🔍 Rechercher un client...",
+  p_cd_create_booking: "Créer la Réservation", p_cd_booking_created: "Réservation créée", p_cd_client_email: "Email du Client", p_cd_client_email_hint: "Facultatif — le client recevra les confirmations et mises à jour de statut par email.", p_cd_bookings_title: "Réservations", p_cd_search_client: "🔍 Rechercher un client...",
   p_cd_no_structure_title: "Aucune propriété autorisée", p_cd_no_structure_desc: "Vous n'avez encore accès à aucune propriété. Demandez au propriétaire de vous ajouter comme collaborateur avec votre pseudo :",
   p_filter_all_statuses: "Tous les statuts", p_filter_all_rooms: "Toutes les chambres", p_filter_year: "Année", p_filter_month: "Mois",
   p_no_bookings_found: "Aucune réservation trouvée.",
@@ -2103,6 +2163,21 @@ const fr: Dict = {
   assistant_view_details: "Voir les détails",
   assistant_error: "Une erreur s'est produite. Veuillez réessayer.",
   assistant_close: "Fermer",
+
+  // --- NOTIFICATIONS EMAIL DE RÉSERVATION ---
+  email_booking_client_new_subject: "Nous avons bien reçu votre demande de réservation — {property}",
+  email_booking_client_new_heading: "Demande de réservation reçue",
+  email_booking_client_new_body: "Bonjour {name}, merci pour votre demande concernant {property} du {start} au {end}. Statut actuel : {status}. Notre équipe vous contactera sous peu pour confirmer chaque détail.",
+  email_booking_client_status_subject: "Mise à jour de réservation — {property}",
+  email_booking_client_status_heading: "Le statut de votre réservation a changé",
+  email_booking_client_status_body: "Bonjour {name}, votre réservation pour {property} du {start} au {end} est désormais : {status}.",
+  email_booking_team_new_subject: "Nouvelle réservation — {property}",
+  email_booking_team_new_heading: "Nouvelle réservation créée",
+  email_booking_team_new_body: "Une nouvelle réservation a été créée pour {property}. Client : {client}, {start} → {end}. Statut : {status}.",
+  email_booking_team_status_subject: "Statut de réservation mis à jour — {property}",
+  email_booking_team_status_heading: "Statut de réservation mis à jour",
+  email_booking_team_status_body: "La réservation pour {property} (client {client}, {start} → {end}) est désormais : {status}.",
+  email_view_booking_button: "Ouvrir la plateforme",
 };
 
 const DICTS: Record<Lang, Dict> = { en, it, es, de, fr };

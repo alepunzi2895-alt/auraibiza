@@ -5,8 +5,8 @@ import { revalidatePath, unstable_cache } from "next/cache";
 import { createHash, randomBytes } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
-import { sendPasswordResetEmail, sendGoogleOnlyNotice } from "@/lib/email";
-import type { Lang } from "@/lib/i18n";
+import { sendPasswordResetEmail, sendGoogleOnlyNotice, sendBookingClientEmail, sendBookingTeamEmail } from "@/lib/email";
+import { t, DEFAULT_LANG, type Lang } from "@/lib/i18n";
 
 // Miniatura leggera (usata solo nella lista pubblica /home) generata una volta
 // alla scrittura, non ad ogni lettura: evita di ritrasferire la cover a piena
@@ -85,7 +85,7 @@ export async function initDatabase() {
       `CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, property_id TEXT NOT NULL, name TEXT NOT NULL, capacity INTEGER NOT NULL, image TEXT, description TEXT)`,
       `CREATE TABLE IF NOT EXISTS pricing (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, month TEXT NOT NULL, base_price INTEGER NOT NULL, cleaning_fee INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS availability (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, date TEXT NOT NULL, status TEXT NOT NULL, price_snapshot TEXT)`,
-      `CREATE TABLE IF NOT EXISTS bookings (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, concierge_id TEXT NOT NULL, client_name TEXT NOT NULL, client_surname TEXT, start_date TEXT NOT NULL, end_date TEXT NOT NULL, notes TEXT, owner_price_total REAL NOT NULL, concierge_fee REAL NOT NULL, total_price REAL NOT NULL, status TEXT NOT NULL, stay_price_total REAL DEFAULT 0, cleaning_fee_total REAL DEFAULT 0, guests_count INTEGER DEFAULT 1, price_adjustments TEXT, fee_mode TEXT DEFAULT 'per_night', fee_value REAL DEFAULT 0, asset_type TEXT DEFAULT 'apartment', created_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS bookings (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, concierge_id TEXT NOT NULL, client_name TEXT NOT NULL, client_surname TEXT, client_email TEXT, start_date TEXT NOT NULL, end_date TEXT NOT NULL, notes TEXT, owner_price_total REAL NOT NULL, concierge_fee REAL NOT NULL, total_price REAL NOT NULL, status TEXT NOT NULL, stay_price_total REAL DEFAULT 0, cleaning_fee_total REAL DEFAULT 0, guests_count INTEGER DEFAULT 1, price_adjustments TEXT, fee_mode TEXT DEFAULT 'per_night', fee_value REAL DEFAULT 0, asset_type TEXT DEFAULT 'apartment', created_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS collaborations (id TEXT PRIMARY KEY, property_id TEXT NOT NULL, concierge_nickname TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS payments (id TEXT PRIMARY KEY, booking_id TEXT NOT NULL, type TEXT NOT NULL, amount REAL NOT NULL, payment_date TEXT NOT NULL, method TEXT NOT NULL, receiver TEXT NOT NULL, created_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS user_payment_methods (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL)`,
@@ -154,6 +154,7 @@ export async function initDatabase() {
       "ALTER TABLE bookings ADD COLUMN dropoff_time TEXT",
       "ALTER TABLE users ADD COLUMN reset_token TEXT",
       "ALTER TABLE users ADD COLUMN reset_token_expires INTEGER",
+      "ALTER TABLE bookings ADD COLUMN client_email TEXT",
     ];
     // `dbReady` è un flag in memoria: si azzera ad ogni cold start serverless,
     // quindi queste migrazioni (quasi sempre no-op, la colonna esiste già) si
@@ -408,6 +409,47 @@ export async function setCommissionRule(userId: string, rate: number, mode: stri
 }
 
 // --- MUTATIONS ---
+// Notifica via email tutte le parti coinvolte in una prenotazione (cliente, owner,
+// concierge, agente) alla creazione e ad ogni cambio di stato. Non blocca mai il
+// flusso principale: eventuali errori di invio vengono solo loggati, non propagati.
+async function notifyBookingParties(bookingId: string, isNew: boolean) {
+  try {
+    const bRes = await db.execute({ sql: "SELECT * FROM bookings WHERE id = ?", args: [bookingId] });
+    const booking = bRes.rows[0] as any;
+    if (!booking) return;
+
+    const roomRes = await db.execute({ sql: "SELECT * FROM rooms WHERE id = ?", args: [booking.room_id] });
+    const room = roomRes.rows[0] as any;
+    const propRes = room ? await db.execute({ sql: "SELECT * FROM properties WHERE id = ?", args: [room.property_id] }) : { rows: [] as any[] };
+    const property = propRes.rows[0] as any;
+
+    const teamUserIds = [property?.owner_id, booking.concierge_id, booking.agent_id].filter(Boolean);
+    const teamEmails = new Set<string>();
+    teamEmails.add("info.auraibiza@gmail.com"); // copia sempre all'admin, come da TODO in CLAUDE.md
+    if (teamUserIds.length > 0) {
+      const placeholders = teamUserIds.map(() => '?').join(',');
+      const usersRes = await db.execute({ sql: `SELECT email FROM users WHERE id IN (${placeholders})`, args: teamUserIds });
+      for (const row of usersRes.rows as any[]) {
+        if (row.email) teamEmails.add(row.email);
+      }
+    }
+
+    const propertyLabel = `${property?.name || ''}${room?.name ? ' — ' + room.name : ''}`;
+    const statusLabel = t(DEFAULT_LANG, `p_status_${booking.status}`);
+    const clientName = `${booking.client_name}${booking.client_surname ? ' ' + booking.client_surname : ''}`;
+    const vars = { name: clientName, client: clientName, property: propertyLabel, start: booking.start_date, end: booking.end_date, status: statusLabel };
+
+    const sendPromises: Promise<{ success: boolean; error?: string }>[] = [];
+    if (booking.client_email) sendPromises.push(sendBookingClientEmail(booking.client_email, DEFAULT_LANG, isNew, vars));
+    for (const email of Array.from(teamEmails)) sendPromises.push(sendBookingTeamEmail(email, DEFAULT_LANG, isNew, vars));
+
+    const results = await Promise.all(sendPromises);
+    for (const r of results) if (!r.success) console.error("Booking notification email failed:", r.error);
+  } catch (error) {
+    console.error("notifyBookingParties error:", error);
+  }
+}
+
 export async function createBooking(data: any) {
   try {
     const id = `b${uid()}`;
@@ -448,10 +490,11 @@ export async function createBooking(data: any) {
     const totalPrice = (data.owner_price_total || 0) + (data.concierge_fee || 0) + agentFee;
 
     await db.execute({
-      sql: "INSERT INTO bookings (id, room_id, concierge_id, client_name, client_surname, start_date, end_date, notes, owner_price_total, concierge_fee, total_price, status, stay_price_total, cleaning_fee_total, guests_count, fee_mode, fee_value, asset_type, platform_fee, platform_fee_rate, agent_fee, agent_id, concierge_commission_on_agent, pickup_time, dropoff_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      args: [id, data.room_id, data.concierge_id, data.client_name, data.client_surname || "", data.start_date, data.end_date, data.notes || "", data.owner_price_total, data.concierge_fee, totalPrice, "draft", data.stay_price_total || 0, data.cleaning_fee_total || 0, data.guests_count || 1, data.fee_mode || 'per_night', data.fee_value || 0, data.asset_type || 'apartment', platformFee, platformFeeRate, agentFee, agentId, conciergeCommissionOnAgent, data.pickup_time || null, data.dropoff_time || null, Date.now()],
+      sql: "INSERT INTO bookings (id, room_id, concierge_id, client_name, client_surname, client_email, start_date, end_date, notes, owner_price_total, concierge_fee, total_price, status, stay_price_total, cleaning_fee_total, guests_count, fee_mode, fee_value, asset_type, platform_fee, platform_fee_rate, agent_fee, agent_id, concierge_commission_on_agent, pickup_time, dropoff_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      args: [id, data.room_id, data.concierge_id, data.client_name, data.client_surname || "", data.client_email || null, data.start_date, data.end_date, data.notes || "", data.owner_price_total, data.concierge_fee, totalPrice, "draft", data.stay_price_total || 0, data.cleaning_fee_total || 0, data.guests_count || 1, data.fee_mode || 'per_night', data.fee_value || 0, data.asset_type || 'apartment', platformFee, platformFeeRate, agentFee, agentId, conciergeCommissionOnAgent, data.pickup_time || null, data.dropoff_time || null, Date.now()],
     });
     revalidatePath("/");
+    await notifyBookingParties(id, true);
     return { id };
   } catch (error) { return { id: "", error: String(error) }; }
 }
@@ -470,6 +513,7 @@ export async function updateBookingStatus(id: string, status: string) {
   try {
     await db.execute({ sql: "UPDATE bookings SET status = ? WHERE id = ?", args: [status, id] });
     revalidatePath("/");
+    await notifyBookingParties(id, false);
   } catch (error) { console.error(error); }
 }
 
@@ -493,6 +537,7 @@ export async function submitPaymentProposal(bookingId: string, payments: any[]) 
     }
     await db.execute({ sql: "UPDATE bookings SET status = 'payment_submitted' WHERE id = ?", args: [bookingId] });
     revalidatePath("/");
+    await notifyBookingParties(bookingId, false);
   } catch (error) { console.error(error); }
 }
 
@@ -506,6 +551,7 @@ export async function confirmPaymentAndBlock(bookingId: string, userId: string, 
     }
     await db.execute({ sql: "UPDATE bookings SET status = 'confirmed_owner' WHERE id = ?", args: [bookingId] });
     revalidatePath("/");
+    await notifyBookingParties(bookingId, false);
   } catch (error) { console.error(error); }
 }
 
@@ -517,6 +563,7 @@ export async function recordFinalBalance(bookingId: string, p: any, _storno?: an
     });
     await db.execute({ sql: "UPDATE bookings SET status = 'evaso' WHERE id = ?", args: [bookingId] });
     revalidatePath("/");
+    await notifyBookingParties(bookingId, false);
   } catch (error) { console.error(error); }
 }
 

@@ -65,3 +65,38 @@ export async function sendGoogleOnlyNotice(to: string, lang: Lang) {
   `);
   return sendEmail(to, t(lang, "email_reset_subject"), html);
 }
+
+const PLATFORM_URL = "https://auraibiza.vercel.app/platform";
+
+// Email al cliente finale (nessun account/login): solo informativa, senza pulsanti d'azione.
+export async function sendBookingClientEmail(
+  to: string, lang: Lang, isNew: boolean,
+  vars: { name: string; property: string; start: string; end: string; status: string }
+) {
+  const subjectKey = isNew ? "email_booking_client_new_subject" : "email_booking_client_status_subject";
+  const headingKey = isNew ? "email_booking_client_new_heading" : "email_booking_client_status_heading";
+  const bodyKey = isNew ? "email_booking_client_new_body" : "email_booking_client_status_body";
+  const html = emailShell(`
+    <h1 style="font-family:Georgia,serif;font-weight:400;font-size:22px;color:#EDE9E1;margin:0 0 12px;">${t(lang, headingKey)}</h1>
+    <p style="font-size:14px;color:#8A8678;line-height:1.7;margin:0;">${t(lang, bodyKey, vars)}</p>
+  `);
+  return sendEmail(to, t(lang, subjectKey, vars), html);
+}
+
+// Email al team operativo (owner/concierge/agent): con pulsante di apertura del pannello.
+export async function sendBookingTeamEmail(
+  to: string, lang: Lang, isNew: boolean,
+  vars: { client: string; property: string; start: string; end: string; status: string }
+) {
+  const subjectKey = isNew ? "email_booking_team_new_subject" : "email_booking_team_status_subject";
+  const headingKey = isNew ? "email_booking_team_new_heading" : "email_booking_team_status_heading";
+  const bodyKey = isNew ? "email_booking_team_new_body" : "email_booking_team_status_body";
+  const html = emailShell(`
+    <h1 style="font-family:Georgia,serif;font-weight:400;font-size:22px;color:#EDE9E1;margin:0 0 12px;">${t(lang, headingKey)}</h1>
+    <p style="font-size:14px;color:#8A8678;line-height:1.7;margin:0 0 24px;">${t(lang, bodyKey, vars)}</p>
+    <div style="text-align:center;">
+      <a href="${PLATFORM_URL}" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#8A6A30,#C8A96E);color:#080B0F;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">${t(lang, "email_view_booking_button")}</a>
+    </div>
+  `);
+  return sendEmail(to, t(lang, subjectKey, vars), html);
+}

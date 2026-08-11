@@ -788,6 +788,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
   }, [assetTab]);
   const [clientName, setClientName] = useState("");
   const [clientSurname, setClientSurname] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [pickupTime, setPickupTime] = useState("");
   const [dropoffTime, setDropoffTime] = useState("");
@@ -920,7 +921,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
       room_id: selectedRoom,
       concierge_id: conciergeIdForBooking,
       agent_id: user.role === "agent" ? user.id : null,
-      client_name: clientName, client_surname: clientSurname,
+      client_name: clientName, client_surname: clientSurname, client_email: clientEmail || null,
       start_date: selectedRange.start, end_date: selectedRange.end, notes,
       owner_price_total: totals.ownerPrice,
       concierge_fee: totals.conciergeFee,
@@ -933,7 +934,7 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
       dropoff_time: isVehicleAsset(selectedRoomAssetType) ? dropoffTime : null,
     });
     setMsg(t(lang, "p_cd_booking_created"));
-    setClientName(""); setClientSurname(""); setNotes(""); setPickupTime(""); setDropoffTime("");
+    setClientName(""); setClientSurname(""); setClientEmail(""); setNotes(""); setPickupTime(""); setDropoffTime("");
     setSelectedRange({ start: null, end: null });
     refresh();
     setTab("bookings");
@@ -1133,6 +1134,11 @@ function ConciergeDashboard({ user, data, refresh, setPdfPreview, isMobile = fal
                   <div style={grid(2)}>
                     <div><label style={label}>{t(lang, "p_cd_first_name")}</label><input style={input} value={clientName} onChange={e => setClientName(e.target.value)} placeholder={t(lang, "p_first_name")} /></div>
                     <div><label style={label}>{t(lang, "p_cd_last_name")}</label><input style={input} value={clientSurname} onChange={e => setClientSurname(e.target.value)} placeholder={t(lang, "p_last_name")} /></div>
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <label style={label}>{t(lang, "p_cd_client_email")}</label>
+                    <input style={input} type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} placeholder="cliente@email.com" />
+                    <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{t(lang, "p_cd_client_email_hint")}</div>
                   </div>
                   <div style={{ marginTop: 12 }}>
                     <label style={label}>{t(lang, "p_cd_guests_count")}</label>
@@ -1859,6 +1865,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
 
   const [clientName, setClientName] = useState("");
   const [clientSurname, setClientSurname] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [pickupTime, setPickupTime] = useState("");
   const [dropoffTime, setDropoffTime] = useState("");
@@ -1917,6 +1924,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
       concierge_id: user.id,
       client_name: clientName,
       client_surname: clientSurname,
+      client_email: clientEmail || null,
       guests_count: Number(guestsCount),
       start_date: selectedRange.start,
       end_date: selectedRange.end,
@@ -1934,7 +1942,7 @@ function OwnerDashboard({ user, data, refresh, setPdfPreview, isMobile = false, 
     // Proprietario crea inizialmente una bozza
     setMsg(t(lang, "p_od_booking_draft_registered"));
     setSelectedRange({ start: null, end: null });
-    setClientName(""); setClientSurname(""); setNotes(""); setGuestsCount("1"); setPickupTime(""); setDropoffTime("");
+    setClientName(""); setClientSurname(""); setClientEmail(""); setNotes(""); setGuestsCount("1"); setPickupTime(""); setDropoffTime("");
     setTab("bookings");
     refresh();
   };
