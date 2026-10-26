@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'NR==2832,NR==3200' src/app/platform/page.tsx)",
+      "Bash(awk '/const migrations = \\\\[/,/\\\\];/' src/app/actions.ts)",
+      "Bash(grep -n \"client_name: clientName, client_surname: clientSurname\\\\|client_name: clientName,$\" src/app/platform/page.tsx)",
+      "Bash(curl -s -o /dev/null -w \"home:%{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"privacy:%{http_code}\\\\n\" http://localhost:3000/privacy)",
+      "Bash(node test_lang_sync.js)",
+      "Bash(node -e ' *)",
+      "Bash(cat .claude/settings.json)",
+      "Bash(echo ---)",
+      "Bash(/Library/Developer/CommandLineTools/usr/bin/git remote *)",
+      "Bash(/Library/Developer/CommandLineTools/usr/bin/git branch *)",
+      "Bash(/Library/Developer/CommandLineTools/usr/bin/git log *)",
+      "Bash(/Library/Developer/CommandLineTools/usr/bin/git add *)",
+      "Bash(/Library/Developer/CommandLineTools/usr/bin/git commit -q -m 'Aggiungi permessi progetto per Claude Code *)",
+      "Bash(/Library/Developer/CommandLineTools/usr/bin/git push *)",
+      "Bash(/Library/Developer/CommandLineTools/usr/bin/git status *)"
+    ]
+  }
+}
